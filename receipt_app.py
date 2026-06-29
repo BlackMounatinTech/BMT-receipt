@@ -51,9 +51,11 @@ def receipt_no():
     return "BMT-" + d.strftime("%y%m%d-%H%M")
 
 
-def make_receipt_pdf(service_desc, amount, monthly, clinic, payer, date_str, method, path, service_detail=""):
+def make_receipt_pdf(service_desc, amount, monthly, clinic, payer, date_str, method, path,
+                     service_detail="", company_address="", company_email="", company_phone=""):
     service_desc = _ascii(service_desc); clinic = _ascii(clinic); payer = _ascii(payer)
     service_detail = _ascii(service_detail)
+    company_address = _ascii(company_address); company_email = _ascii(company_email); company_phone = _ascii(company_phone)
     pdf = FPDF("P", "mm", "A4")
     pdf.set_auto_page_break(False)  # keep it to ONE page, footer pinned at bottom
     pdf.add_page()
@@ -80,7 +82,13 @@ def make_receipt_pdf(service_desc, amount, monthly, clinic, payer, date_str, met
     pdf.set_x(M); pdf.set_font("Helvetica", "", 10); pdf.set_text_color(*INK)
     pdf.cell(W-2*M, 5.5, clinic or "________________", align="R", new_x="LMARGIN", new_y="NEXT")
     if payer:
-        pdf.set_x(M); pdf.cell(W-2*M, 5.5, payer, align="R", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_x(M); pdf.cell(W-2*M, 5.5, "Authorized by: " + payer, align="R", new_x="LMARGIN", new_y="NEXT")
+    if company_address:
+        pdf.set_x(M); pdf.cell(W-2*M, 5.5, company_address, align="R", new_x="LMARGIN", new_y="NEXT")
+    if company_email:
+        pdf.set_x(M); pdf.cell(W-2*M, 5.5, company_email, align="R", new_x="LMARGIN", new_y="NEXT")
+    if company_phone:
+        pdf.set_x(M); pdf.cell(W-2*M, 5.5, company_phone, align="R", new_x="LMARGIN", new_y="NEXT")
     pdf.ln(8)
 
     # table header
@@ -153,9 +161,11 @@ else:
     service_detail = svc.get("desc", "")
     st.info(f"Amount: ${amount:,.2f}" + (f"  •  then ${monthly:,.0f}/mo" if monthly else ""))
 
-clinic = st.text_input("Business / clinic name", placeholder="Smith Family Dental")
-payer = st.text_input("Paid by (contact name)", placeholder="Dr. Jane Smith")
-to_email = st.text_input("Send receipt to (their email)", placeholder="jane@smithdental.ca")
+clinic = st.text_input("Company name", placeholder="Smith Family Dental")
+payer = st.text_input("Name of person who authorized payment", placeholder="Dr. Jane Smith")
+company_address = st.text_input("Company address", placeholder="123 Main St, Campbell River, BC")
+to_email = st.text_input("Company email", placeholder="jane@smithdental.ca")
+company_phone = st.text_input("Company phone", placeholder="250-555-1234")
 c1, c2 = st.columns(2)
 date_str = c1.date_input("Date", dt.date.today()).strftime("%Y-%m-%d")
 method = c2.selectbox("Payment method", ["E-transfer", "Cash", "Card (Stripe)", "Cheque"])
@@ -164,7 +174,8 @@ st.divider()
 
 if st.button("Generate receipt", type="primary", use_container_width=True):
     path = OUT / "receipt_preview.pdf"
-    inv = make_receipt_pdf(service_desc, amount, monthly, clinic, payer, date_str, method, path, service_detail)
+    inv = make_receipt_pdf(service_desc, amount, monthly, clinic, payer, date_str, method, path,
+                           service_detail, company_address, to_email, company_phone)
     st.session_state["pdf_path"] = str(path)
     st.session_state["inv"] = inv
     st.session_state["pdf_clinic"] = clinic
