@@ -17,14 +17,14 @@
   *{box-sizing:border-box;margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;}
   body{background:var(--bg);color:#1a1a1a;padding:24px;line-height:1.5;}
   .wrap{max-width:560px;margin:0 auto;}
-  .card{background:#fff;border-radius:16px;padding:28px;box-shadow:0 2px 20px rgba(0,0,0,.06);}
-  h1{font-size:20px;color:var(--navy);margin-bottom:4px;}
-  .sub{color:var(--grey);font-size:14px;margin-bottom:24px;}
-  label{display:block;font-weight:600;font-size:13px;margin:16px 0 6px;color:var(--navy);}
-  input,select{width:100%;padding:12px;border:1px solid var(--line);border-radius:10px;font-size:15px;background:#fff;}
+  .card{background:#fff;border-radius:16px;padding:22px;box-shadow:0 2px 20px rgba(0,0,0,.06);}
+  h1{font-size:19px;color:var(--navy);margin-bottom:4px;}
+  .sub{color:var(--grey);font-size:13px;margin-bottom:20px;}
+  label{display:block;font-weight:600;font-size:13px;margin:14px 0 5px;color:var(--navy);}
+  input,select{width:100%;padding:10px;border:1px solid var(--line);border-radius:10px;font-size:15px;background:#fff;min-width:0;}
   input:focus,select:focus{outline:none;border-color:var(--navy);}
-  .row{display:flex;gap:12px;}
-  .row>div{flex:1;}
+  .row{display:flex;gap:10px;flex-wrap:wrap;}
+  .row>div{flex:1;min-width:130px;}
   .total{margin-top:20px;padding:16px;background:var(--bg);border-radius:10px;display:flex;justify-content:space-between;align-items:center;font-size:18px;font-weight:700;color:var(--navy);}
   button{margin-top:20px;width:100%;padding:15px;background:var(--navy);color:#fff;border:none;border-radius:10px;font-size:16px;font-weight:600;cursor:pointer;}
   button:active{opacity:.85;}
@@ -39,7 +39,9 @@
 
     <label>Service</label>
     <select id="service" onchange="recalc()">
-      <option value="1500|Patient Comeback Campaign (one-time)">Patient Comeback Campaign — $1,500 (one-time)</option>
+      <option value="1500|Patient Reactivation Campaign (one-time)">Patient Reactivation Campaign — $1,500 (one-time)</option>
+      <option value="1500|Missed-Call Text-Back (setup)">Missed-Call Text-Back — $1,500 (setup)</option>
+      <option value="2500|Package AI — Reactivation + Missed-Call Text-Back (setup)">Package AI (Reactivation + Missed-Call Text-Back) — $2,500 (setup)</option>
       <option value="500|AI Walkthrough (one session)">AI Walkthrough — $500 (one session)</option>
       <option value="300|AI Walkthrough (one session)">AI Walkthrough — $300 (one session)</option>
       <option value="custom|Custom">Custom amount…</option>
