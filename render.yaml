@@ -1,0 +1,12 @@
+# Render static-site config — serves the receipt tool as a website.
+# Connect this repo in Render, it auto-detects this file.
+services:
+  - type: web
+    name: bmt-receipt-tool
+    runtime: static
+    buildCommand: ""
+    staticPublishPath: .
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html

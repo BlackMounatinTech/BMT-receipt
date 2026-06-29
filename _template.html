@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BMT Receipt</title>
+<!-- Add-to-Home-Screen (iPhone): installs as a standalone app named "BMT Receipt" -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="BMT Receipt">
+<meta name="theme-color" content="#1a202c">
+<link rel="apple-touch-icon" href="{{LOGO}}">
+<link rel="icon" href="{{LOGO}}">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+  :root{ --navy:#1a202c; --grey:#5a5a5a; --line:#d6dadc; --bg:#f4f5f7; }
+  *{box-sizing:border-box;margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;}
+  body{background:var(--bg);color:#1a1a1a;padding:24px;line-height:1.5;}
+  .wrap{max-width:560px;margin:0 auto;}
+  .card{background:#fff;border-radius:16px;padding:28px;box-shadow:0 2px 20px rgba(0,0,0,.06);}
+  h1{font-size:20px;color:var(--navy);margin-bottom:4px;}
+  .sub{color:var(--grey);font-size:14px;margin-bottom:24px;}
+  label{display:block;font-weight:600;font-size:13px;margin:16px 0 6px;color:var(--navy);}
+  input,select{width:100%;padding:12px;border:1px solid var(--line);border-radius:10px;font-size:15px;background:#fff;}
+  input:focus,select:focus{outline:none;border-color:var(--navy);}
+  .row{display:flex;gap:12px;}
+  .row>div{flex:1;}
+  .total{margin-top:20px;padding:16px;background:var(--bg);border-radius:10px;display:flex;justify-content:space-between;align-items:center;font-size:18px;font-weight:700;color:var(--navy);}
+  button{margin-top:20px;width:100%;padding:15px;background:var(--navy);color:#fff;border:none;border-radius:10px;font-size:16px;font-weight:600;cursor:pointer;}
+  button:active{opacity:.85;}
+  .hint{font-size:12px;color:var(--grey);margin-top:12px;text-align:center;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <h1>Receipt / Invoice Generator</h1>
+    <div class="sub">Black Mountain Technologies — generate a branded receipt in seconds.</div>
+
+    <label>Service</label>
+    <select id="service" onchange="recalc()">
+      <option value="1500|Patient Comeback Campaign (one-time)">Patient Comeback Campaign — $1,500 (one-time)</option>
+      <option value="500|AI Walkthrough (one session)">AI Walkthrough — $500 (one session)</option>
+      <option value="300|AI Walkthrough (one session)">AI Walkthrough — $300 (one session)</option>
+      <option value="custom|Custom">Custom amount…</option>
+    </select>
+
+    <div id="customWrap" style="display:none;">
+      <label>Custom description</label>
+      <input id="customDesc" placeholder="e.g. Appointment Reminder setup">
+      <label>Custom amount ($)</label>
+      <input id="customAmt" type="number" placeholder="1000" oninput="recalc()">
+    </div>
+
+    <label>Clinic / business name</label>
+    <input id="clinic" placeholder="Smith Family Dental">
+
+    <label>Paid by (contact name)</label>
+    <input id="payer" placeholder="Dr. Jane Smith">
+
+    <div class="row">
+      <div>
+        <label>Date</label>
+        <input id="date" type="date">
+      </div>
+      <div>
+        <label>Payment method</label>
+        <select id="method">
+          <option>E-transfer</option>
+          <option>Cash</option>
+          <option>Card (Stripe)</option>
+          <option>Cheque</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="total"><span>Total</span><span id="totalDisp">$1,500.00</span></div>
+
+    <button onclick="makePDF()">Generate Receipt PDF</button>
+    <div class="hint">Saves a PDF you can email on the spot. Works offline.</div>
+  </div>
+</div>
+
+<script>
+const LOGO = "{{LOGO}}";
+
+function todayStr(){ const d=new Date(); return d.toISOString().slice(0,10); }
+document.getElementById('date').value = todayStr();
+
+function parseService(){
+  const v = document.getElementById('service').value;
+  const [amt, desc] = v.split('|');
+  if(amt === 'custom'){
+    return { amount: parseFloat(document.getElementById('customAmt').value||0),
+             desc: document.getElementById('customDesc').value || 'Custom service' };
+  }
+  return { amount: parseFloat(amt), desc };
+}
+function recalc(){
+  const isCustom = document.getElementById('service').value.startsWith('custom');
+  document.getElementById('customWrap').style.display = isCustom ? 'block':'none';
+  const s = parseService();
+  document.getElementById('totalDisp').textContent = '$' + s.amount.toLocaleString('en-US',{minimumFractionDigits:2});
+}
+recalc();
+
+function invoiceNo(){
+  const d=new Date();
+  const stamp = d.getFullYear().toString().slice(2)+
+    String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0')+
+    '-'+String(d.getHours()).padStart(2,'0')+String(d.getMinutes()).padStart(2,'0');
+  return 'BMT-'+stamp;
+}
+
+function makePDF(){
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({unit:'mm', format:'a4'});
+  const s = parseService();
+  const clinic = document.getElementById('clinic').value || '________________';
+  const payer = document.getElementById('payer').value || '';
+  const date = document.getElementById('date').value || todayStr();
+  const method = document.getElementById('method').value;
+  const inv = invoiceNo();
+  const amt = s.amount.toLocaleString('en-US',{minimumFractionDigits:2});
+
+  const navy=[26,32,44], grey=[90,90,90], ink=[20,20,20], line=[214,218,220];
+  const M=20, W=210;
+
+  // logo (centered)
+  try{ doc.addImage(LOGO,'PNG', (W-46)/2, 14, 46, 26); }catch(e){}
+
+  doc.setFont('helvetica','bold'); doc.setFontSize(16); doc.setTextColor(...navy);
+  doc.text('RECEIPT', W/2, 48, {align:'center'});
+
+  doc.setDrawColor(...line); doc.setLineWidth(0.4); doc.line(M,54,W-M,54);
+
+  // meta
+  doc.setFontSize(10); doc.setFont('helvetica','normal'); doc.setTextColor(...grey);
+  doc.text('Receipt #: '+inv, M, 64);
+  doc.text('Date: '+date, M, 70);
+  doc.text('Payment method: '+method, M, 76);
+
+  // billed to
+  doc.setFont('helvetica','bold'); doc.setTextColor(...navy); doc.text('BILLED TO', W-M, 64, {align:'right'});
+  doc.setFont('helvetica','normal'); doc.setTextColor(...ink);
+  doc.text(clinic, W-M, 70, {align:'right'});
+  if(payer) doc.text(payer, W-M, 76, {align:'right'});
+
+  // table
+  let y=92;
+  doc.setFillColor(244,245,247); doc.rect(M,y-6,W-2*M,9,'F');
+  doc.setFont('helvetica','bold'); doc.setTextColor(...navy); doc.setFontSize(10);
+  doc.text('DESCRIPTION', M+3, y); doc.text('AMOUNT', W-M-3, y, {align:'right'});
+  y+=12;
+  doc.setFont('helvetica','normal'); doc.setTextColor(...ink); doc.setFontSize(11);
+  doc.text(s.desc, M+3, y); doc.text('$'+amt, W-M-3, y, {align:'right'});
+  y+=8; doc.setDrawColor(...line); doc.line(M,y,W-M,y);
+
+  // total
+  y+=12;
+  doc.setFont('helvetica','bold'); doc.setFontSize(13); doc.setTextColor(...navy);
+  doc.text('TOTAL PAID', M+3, y); doc.text('$'+amt, W-M-3, y, {align:'right'});
+
+  // paid stamp
+  y+=14;
+  doc.setTextColor(34,139,34); doc.setFontSize(11);
+  doc.text('PAID — Thank you.', M+3, y);
+
+  // footer
+  doc.setDrawColor(...line); doc.line(M,272,W-M,272);
+  doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(...grey);
+  doc.text('Black Mountain Technologies  (1592763 B.C. LTD.)   Incorporation No. BC1592763', W/2, 278, {align:'center'});
+  doc.text('515 Petersen, Campbell River, BC V9W 3H6   |   250-254-2377   |   michael@blackmountaintechnologies.ca', W/2, 283, {align:'center'});
+
+  const safe = clinic.replace(/[^a-z0-9]/gi,'_');
+  doc.save('BMT_Receipt_'+safe+'.pdf');
+}
+</script>
+</body>
+</html>
