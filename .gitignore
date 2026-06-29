@@ -1,2 +1,5 @@
 .tmp/
 .DS_Store
+__pycache__/
+config/gmail_token.json
+config/gmail_client_secret.json
