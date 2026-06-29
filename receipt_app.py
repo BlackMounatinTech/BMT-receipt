@@ -21,12 +21,17 @@ LINE = (214, 218, 220); GREEN = (34, 110, 60)
 
 # The services + pricing (matches the contract + one-pager)
 SERVICES = {
-    "Patient Reactivation Campaign (one-time)": {"amount": 1500, "monthly": 0},
-    "Missed-Call Text-Back (setup)": {"amount": 1500, "monthly": 250},
-    "Package AI - Reactivation + Missed-Call Text-Back (setup)": {"amount": 2500, "monthly": 250},
-    "AI Walkthrough ($500 session)": {"amount": 500, "monthly": 0},
-    "AI Walkthrough ($300 session)": {"amount": 300, "monthly": 0},
-    "Custom": {"amount": 0, "monthly": 0},
+    "Patient Reactivation Campaign (one-time)": {"amount": 1500, "monthly": 0,
+        "desc": "A done-for-you campaign that reaches your past customers in your name and invites them back in. Their data stays in your office. Set up and live within the week."},
+    "Missed-Call Text-Back (setup)": {"amount": 1500, "monthly": 250,
+        "desc": "An AI system that automatically texts back anyone whose call you miss, in your name, so they hear from you before they try the next place."},
+    "Package AI - Reactivation + Missed-Call Text-Back (setup)": {"amount": 2500, "monthly": 250,
+        "desc": "Both systems together: win back your past customers and catch every missed call. Set up done for you, live within the week."},
+    "AI Walkthrough ($500 session)": {"amount": 500, "monthly": 0,
+        "desc": "A one-session walkthrough mapping exactly where your front desk is leaking time and money, with a written plan of what AI can do for your business. You keep the plan."},
+    "AI Walkthrough ($300 session)": {"amount": 300, "monthly": 0,
+        "desc": "A one-session walkthrough mapping exactly where your front desk is leaking time and money, with a written plan of what AI can do for your business. You keep the plan."},
+    "Custom": {"amount": 0, "monthly": 0, "desc": ""},
 }
 
 
@@ -46,10 +51,11 @@ def receipt_no():
     return "BMT-" + d.strftime("%y%m%d-%H%M")
 
 
-def make_receipt_pdf(service_desc, amount, monthly, clinic, payer, date_str, method, path):
+def make_receipt_pdf(service_desc, amount, monthly, clinic, payer, date_str, method, path, service_detail=""):
     service_desc = _ascii(service_desc); clinic = _ascii(clinic); payer = _ascii(payer)
+    service_detail = _ascii(service_detail)
     pdf = FPDF("P", "mm", "A4")
-    pdf.set_auto_page_break(True, 20)
+    pdf.set_auto_page_break(False)  # keep it to ONE page, footer pinned at bottom
     pdf.add_page()
     W, M = 210, 20
     inv = receipt_no()
@@ -83,9 +89,12 @@ def make_receipt_pdf(service_desc, amount, monthly, clinic, payer, date_str, met
     pdf.cell(W-2*M-30, 5, "DESCRIPTION")
     pdf.cell(24, 5, "AMOUNT", align="R", new_x="LMARGIN", new_y="NEXT")
     pdf.ln(4)
-    pdf.set_x(M+3); pdf.set_font("Helvetica", "", 11); pdf.set_text_color(*INK)
+    pdf.set_x(M+3); pdf.set_font("Helvetica", "B", 11); pdf.set_text_color(*INK)
     pdf.cell(W-2*M-30, 6, service_desc)
     pdf.cell(24, 6, f"${amount:,.2f}", align="R", new_x="LMARGIN", new_y="NEXT")
+    if service_detail:
+        pdf.set_x(M+3); pdf.set_font("Helvetica", "", 9); pdf.set_text_color(*GREY)
+        pdf.multi_cell(W-2*M-6, 4.4, service_detail)
     pdf.ln(1); pdf.set_draw_color(*LINE); pdf.line(M, pdf.get_y(), W-M, pdf.get_y()); pdf.ln(5)
 
     # total
@@ -137,9 +146,11 @@ if service_name == "Custom":
     amount = st.number_input("Amount ($)", min_value=0.0, value=1000.0, step=50.0)
     monthly = st.number_input("Monthly recurring ($, 0 if none)", min_value=0.0, value=0.0, step=50.0)
     service_desc = custom_desc or "Custom service"
+    service_detail = st.text_input("Description line (optional)", "")
 else:
     amount = float(svc["amount"]); monthly = float(svc["monthly"])
     service_desc = service_name
+    service_detail = svc.get("desc", "")
     st.info(f"Amount: ${amount:,.2f}" + (f"  •  then ${monthly:,.0f}/mo" if monthly else ""))
 
 clinic = st.text_input("Business / clinic name", placeholder="Smith Family Dental")
@@ -153,7 +164,7 @@ st.divider()
 
 if st.button("Generate receipt", type="primary", use_container_width=True):
     path = OUT / "receipt_preview.pdf"
-    inv = make_receipt_pdf(service_desc, amount, monthly, clinic, payer, date_str, method, path)
+    inv = make_receipt_pdf(service_desc, amount, monthly, clinic, payer, date_str, method, path, service_detail)
     st.session_state["pdf_path"] = str(path)
     st.session_state["inv"] = inv
     st.session_state["pdf_clinic"] = clinic
