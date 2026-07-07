@@ -309,16 +309,19 @@ if mode == "Company Profile":
         send_label = "Send profile" if method_active != "none" else "Send (email not configured)"
         if st.button(send_label, use_container_width=True, disabled=(method_active == "none" or not prof_email)):
             body = (
-                "Hi,\n\n"
+                "Hey there,\n\n"
                 "Great talking with you. As promised, our company profile is attached so you can see exactly who "
-                "you're working with, our BC incorporation, registered office, and the two services we run for clinics.\n\n"
+                "you're working with. Our BC incorporation, registered office, and the two services we run for clinics.\n\n"
                 "Everything's also on our site at blackmountaintech.ca.\n\n"
-                "To lock in your spot for this week, an e-transfer to "
-                "michael@blackmountaintechnologies.ca is easiest. A card link works too, it just carries a 3% fee.\n\n"
+                "To get you booked in for this week, send the e-transfer to michael@blackmountaintechnologies.ca and "
+                "I'll get your setup started right away. We prefer e-transfer over card because of the 3% processing "
+                "fee, but if you need to use a card we can send you a Stripe link.\n\n"
+                "Once that's in, we'll set up a quick meeting within the next three to seven days at whatever time "
+                "works best for you, to get the software set up and everything running.\n\n"
                 "Talk soon,\n"
                 "Michael Mackrell\n"
                 "Owner & CEO, Black Mountain Technologies\n"
-                "250-254-2377  |  blackmountaintech.ca"
+                "250-254-2377, blackmountaintech.ca"
             )
             res = send_email(
                 to=prof_email,
