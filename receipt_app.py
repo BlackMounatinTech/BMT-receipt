@@ -149,7 +149,7 @@ def make_profile_pdf(path):
 
     # Logo, centered, bigger
     if LOGO.exists():
-        lw = 60
+        lw = 85
         pdf.image(str(LOGO), x=(W - lw) / 2, y=14, w=lw)
         y = 14 + (lw * 943 / 1668) + 5
     else:
