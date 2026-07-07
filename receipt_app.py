@@ -140,9 +140,134 @@ def make_receipt_pdf(service_desc, amount, monthly, clinic, payer, date_str, met
     return inv
 
 
+def make_profile_pdf(path):
+    """The Company Profile one-pager — the trust doc sent the moment a clinic wants to see who they're dealing with."""
+    pdf = FPDF("P", "mm", "A4")
+    pdf.set_auto_page_break(False)
+    pdf.add_page()
+    W, M = 210, 20
+
+    # Logo, centered, bigger
+    if LOGO.exists():
+        lw = 60
+        pdf.image(str(LOGO), x=(W - lw) / 2, y=14, w=lw)
+        y = 14 + (lw * 943 / 1668) + 5
+    else:
+        y = 30
+    pdf.set_y(y); pdf.set_font("Helvetica", "", 12); pdf.set_text_color(*GREY)
+    pdf.cell(0, 6, "Company Profile", align="C", new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(2); pdf.set_draw_color(*LINE); pdf.set_line_width(0.3)
+    pdf.line(M, pdf.get_y(), W-M, pdf.get_y()); pdf.ln(6)
+
+    # Who we are
+    pdf.set_x(M); pdf.set_font("Helvetica", "B", 13); pdf.set_text_color(*INK)
+    pdf.cell(0, 7, "Who We Are", new_x="LMARGIN", new_y="NEXT")
+    pdf.set_x(M); pdf.set_font("Helvetica", "", 11); pdf.set_text_color(*INK)
+    pdf.multi_cell(W-2*M, 6, _ascii(
+        "Black Mountain Technologies is an artificial intelligence software company out of British Columbia. "
+        "We build AI technologies for appointment-based clinics to retain and reactivate clients, and to recover "
+        "the revenue they quietly lose through missed calls and patients who drift away. Everything is fully "
+        "managed by us, in-house. Nothing is outsourced, and we keep none of your information."))
+    pdf.ln(4)
+
+    # What we do
+    pdf.set_x(M); pdf.set_font("Helvetica", "B", 13); pdf.set_text_color(*INK)
+    pdf.cell(0, 7, "What We Do", new_x="LMARGIN", new_y="NEXT")
+    for title, body in [
+        ("Patient Reactivation",
+         "We text your dormant patient list back into the chair, in your clinic's name. Booked straight into your calendar. $1,500 one-time, no monthly."),
+        ("Missed-Call Text-Back",
+         "The moment a call is missed, the caller gets an instant text from you and books, instead of calling the next clinic. Runs 24/7. $1,500 setup + $250/month."),
+    ]:
+        pdf.set_x(M); pdf.set_font("Helvetica", "B", 11); pdf.set_text_color(*INK)
+        pdf.cell(0, 6, f"-  {title}", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_x(M+4); pdf.set_font("Helvetica", "", 10.5); pdf.set_text_color(*GREY)
+        pdf.multi_cell(W-2*M-4, 5.5, _ascii(body)); pdf.ln(2)
+    pdf.set_x(M); pdf.set_font("Helvetica", "B", 10.5); pdf.set_text_color(*INK)
+    pdf.cell(0, 6, "Both services together: $2,500  (reactivation one-time + missed-call $250/month).", new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(3)
+    pdf.set_x(M); pdf.set_font("Helvetica", "", 9.5); pdf.set_text_color(*GREY)
+    pdf.multi_cell(W-2*M, 5, "Full privacy policies and terms are available on our website at blackmountaintech.ca.")
+    pdf.ln(4)
+
+    # Company details box
+    box_y = pdf.get_y()
+    pdf.set_fill_color(247, 247, 247); pdf.rect(M, box_y, W-2*M, 54, "F")
+    pdf.set_xy(M+4, box_y+4); pdf.set_font("Helvetica", "B", 12); pdf.set_text_color(*INK)
+    pdf.cell(0, 6, "Company Details", new_x="LMARGIN", new_y="NEXT")
+    details = [
+        ("Legal name", "Black Mountain Technologies (1592763 B.C. LTD.)"),
+        ("Incorporation No.", "BC1592763  (Province of British Columbia)"),
+        ("Registered office", "515 Petersen, Campbell River, BC V9W 3H6"),
+        ("Owner / CEO", "Michael Mackrell, Owner & Chief Executive Officer"),
+        ("Phone", "250-254-2377"),
+        ("Email", "michael@blackmountaintechnologies.ca"),
+        ("Website", "blackmountaintech.ca"),
+    ]
+    ry = box_y + 12
+    for label, val in details:
+        pdf.set_xy(M+4, ry); pdf.set_font("Helvetica", "B", 9.5); pdf.set_text_color(*GREY)
+        pdf.cell(38, 5.4, label)
+        pdf.set_font("Helvetica", "", 9.5); pdf.set_text_color(*INK)
+        pdf.cell(0, 5.4, _ascii(val)); ry += 5.6
+
+    # footer
+    pdf.set_y(-22); pdf.set_draw_color(*LINE); pdf.line(M, pdf.get_y(), W-M, pdf.get_y()); pdf.ln(2)
+    pdf.set_font("Helvetica", "", 8.5); pdf.set_text_color(*GREY)
+    pdf.cell(0, 4, "Black Mountain Technologies  (1592763 B.C. LTD.)   Incorporation No. BC1592763", align="C", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 4, "515 Petersen, Campbell River, BC V9W 3H6   |   250-254-2377   |   michael@blackmountaintechnologies.ca", align="C")
+    pdf.output(str(path))
+
+
 # ---------------- UI ----------------
-st.set_page_config(page_title="BMT Receipt", page_icon="🧾")
-st.title("BMT Receipt")
+st.set_page_config(page_title="BMT Tools", page_icon="🧾")
+st.title("BMT Tools")
+
+mode = st.radio("What do you need?", ["Receipt", "Company Profile"], horizontal=True)
+st.divider()
+
+if mode == "Company Profile":
+    st.caption("Send the company profile the second they say yes. Just an email — it fires instantly.")
+    prof_email = st.text_input("Their email", placeholder="jane@smithdental.ca")
+    if st.button("Generate profile", type="primary", use_container_width=True):
+        ppath = OUT / "company_profile.pdf"
+        make_profile_pdf(ppath)
+        st.session_state["prof_path"] = str(ppath)
+        st.success("Company profile generated.")
+    if st.session_state.get("prof_path"):
+        ppath = Path(st.session_state["prof_path"])
+        with open(ppath, "rb") as f:
+            st.download_button("View / download PDF", f, file_name="Black_Mountain_Technologies_Profile.pdf",
+                               mime="application/pdf", use_container_width=True)
+        method_active = configured_method()
+        send_label = "Send profile" if method_active != "none" else "Send (email not configured)"
+        if st.button(send_label, use_container_width=True, disabled=(method_active == "none" or not prof_email)):
+            body = (
+                "Hi,\n\n"
+                "Great talking with you. As promised, our company profile is attached so you can see exactly who "
+                "you're working with, our BC incorporation, registered office, and the two services we run for clinics.\n\n"
+                "Everything's also on our site at blackmountaintech.ca.\n\n"
+                "Whenever you're ready to lock in your spot for this week, an e-transfer to "
+                "michael@blackmountaintechnologies.ca is easiest (a card link works too, it just carries a 3% fee).\n\n"
+                "Talk soon,\n"
+                "Michael Mackrell\n"
+                "Owner & CEO, Black Mountain Technologies\n"
+                "250-254-2377  |  blackmountaintech.ca"
+            )
+            res = send_email(
+                to=prof_email,
+                subject="Black Mountain Technologies - Company Profile",
+                body_text=body,
+                attachments=[ppath],
+            )
+            if res.get("ok"):
+                st.success(f"Sent to {prof_email} ✅")
+            else:
+                st.error(f"Could not send: {res.get('reason','unknown error')}")
+        if method_active == "none":
+            st.caption("Email sending isn't set up yet. Once the Gmail app password is on Render, Send goes live.")
+    st.stop()
+
 st.caption("Black Mountain Technologies — generate a branded receipt and email it on the spot.")
 
 col1, col2 = st.columns(2)
