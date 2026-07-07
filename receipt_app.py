@@ -16,6 +16,42 @@ LOGO = HERE / "assets_logo.png"
 OUT = HERE / ".tmp"
 OUT.mkdir(exist_ok=True)
 
+# --- simple CRM log (email -> prospect/client) ---
+import csv as _csv
+LEADS = HERE / "leads_log.csv"
+
+def _load_leads():
+    if not LEADS.exists():
+        return []
+    with open(LEADS, newline="", encoding="utf-8") as f:
+        return list(_csv.DictReader(f))
+
+def _save_leads(rows):
+    with open(LEADS, "w", newline="", encoding="utf-8") as f:
+        w = _csv.DictWriter(f, fieldnames=["email", "clinic", "status", "first_contact", "notes"])
+        w.writeheader(); w.writerows(rows)
+
+def log_lead(email, clinic="", status="prospect"):
+    email = (email or "").strip().lower()
+    if not email:
+        return
+    rows = _load_leads()
+    for r in rows:
+        if r["email"] == email:
+            if clinic and not r.get("clinic"):
+                r["clinic"] = clinic
+            _save_leads(rows); return
+    rows.append({"email": email, "clinic": clinic, "status": status,
+                 "first_contact": dt.datetime.now().strftime("%Y-%m-%d"), "notes": ""})
+    _save_leads(rows)
+
+def set_status(email, status):
+    rows = _load_leads()
+    for r in rows:
+        if r["email"] == email.strip().lower():
+            r["status"] = status
+    _save_leads(rows)
+
 NAVY = (26, 32, 44); GREY = (90, 90, 90); INK = (20, 20, 20)
 LINE = (214, 218, 220); GREEN = (34, 110, 60)
 
@@ -223,8 +259,38 @@ def make_profile_pdf(path):
 st.set_page_config(page_title="BMT Tools", page_icon="🧾")
 st.title("BMT Tools")
 
-mode = st.radio("What do you need?", ["Receipt", "Company Profile"], horizontal=True)
+mode = st.radio("What do you need?", ["Receipt", "Company Profile", "Prospects"], horizontal=True)
 st.divider()
+
+if mode == "Prospects":
+    rows = _load_leads()
+    prospects = [r for r in rows if r["status"] == "prospect"]
+    clients = [r for r in rows if r["status"] == "client"]
+    c1, c2 = st.columns(2)
+    c1.metric("Prospects", len(prospects))
+    c2.metric("Clients", len(clients))
+    if rows:
+        with open(LEADS, "rb") as f:
+            st.download_button("Download full list (CSV)", f, file_name="BMT_leads.csv",
+                               mime="text/csv", use_container_width=True)
+    st.subheader("Prospects")
+    if not prospects:
+        st.caption("No prospects yet. Every company profile you send lands here.")
+    for r in prospects:
+        cols = st.columns([3, 2, 1.4])
+        cols[0].write(r["email"])
+        cols[1].write(r.get("clinic") or "—")
+        if cols[2].button("→ Client", key="c_" + r["email"]):
+            set_status(r["email"], "client"); st.rerun()
+    if clients:
+        st.subheader("Clients")
+        for r in clients:
+            cols = st.columns([3, 2, 1.4])
+            cols[0].write("✅ " + r["email"])
+            cols[1].write(r.get("clinic") or "—")
+            if cols[2].button("↩ Prospect", key="p_" + r["email"]):
+                set_status(r["email"], "prospect"); st.rerun()
+    st.stop()
 
 if mode == "Company Profile":
     st.caption("Send the company profile the second they say yes. Just an email — it fires instantly.")
@@ -261,7 +327,8 @@ if mode == "Company Profile":
                 attachments=[ppath],
             )
             if res.get("ok"):
-                st.success(f"Sent to {prof_email} ✅")
+                log_lead(prof_email, status="prospect")
+                st.success(f"Sent to {prof_email} ✅  (logged as a prospect)")
             else:
                 st.error(f"Could not send: {res.get('reason','unknown error')}")
         if method_active == "none":
@@ -330,7 +397,8 @@ if st.session_state.get("pdf_path"):
             attachments=[path],
         )
         if res.get("ok"):
-            st.success(f"Sent to {to_email} ✅")
+            log_lead(to_email, clinic=clinic, status="client")
+            st.success(f"Sent to {to_email} ✅  (logged as a client)")
         else:
             st.error(f"Could not send: {res.get('reason','unknown error')}")
     if method_active == "none":

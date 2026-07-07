@@ -4,3 +4,4 @@ __pycache__/
 config/gmail_token.json
 config/gmail_client_secret.json
 .env
+leads_log.csv
