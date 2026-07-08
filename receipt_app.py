@@ -211,17 +211,15 @@ def make_profile_pdf(path):
     pdf.cell(0, 7, "What We Do", new_x="LMARGIN", new_y="NEXT")
     for title, body in [
         ("Patient Reactivation",
-         "We text your dormant patient list back into the chair, in your clinic's name. Booked straight into your calendar. $1,500 one-time, no monthly."),
+         "We text your dormant patient list back into the chair, in your clinic's name. Booked straight into your calendar, with almost nothing on your end."),
         ("Missed-Call Text-Back",
-         "The moment a call is missed, the caller gets an instant text from you and books, instead of calling the next clinic. Runs 24/7. $1,500 setup + $250/month."),
+         "The moment a call is missed, the caller gets an instant text from you and books, instead of calling the next clinic. Runs 24/7."),
     ]:
         pdf.set_x(M); pdf.set_font("Helvetica", "B", 11); pdf.set_text_color(*INK)
         pdf.cell(0, 6, f"-  {title}", new_x="LMARGIN", new_y="NEXT")
         pdf.set_x(M+4); pdf.set_font("Helvetica", "", 10.5); pdf.set_text_color(*GREY)
         pdf.multi_cell(W-2*M-4, 5.5, _ascii(body)); pdf.ln(2)
-    pdf.set_x(M); pdf.set_font("Helvetica", "B", 10.5); pdf.set_text_color(*INK)
-    pdf.cell(0, 6, "Both services together: $2,500  (reactivation one-time + missed-call $250/month).", new_x="LMARGIN", new_y="NEXT")
-    pdf.ln(3)
+    pdf.ln(1)
     pdf.set_x(M); pdf.set_font("Helvetica", "", 9.5); pdf.set_text_color(*GREY)
     pdf.multi_cell(W-2*M, 5, "Full privacy policies and terms are available on our website at blackmountaintech.ca.")
     pdf.ln(4)

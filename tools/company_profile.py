@@ -81,9 +81,9 @@ def build(prepared_for=None):
     y += 9
     for title, body in [
         ("Patient Reactivation",
-         "We text your dormant patient list back into the chair, in your clinic's name. Booked straight into your calendar. $1,500 one-time, no monthly."),
+         "We text your dormant patient list back into the chair, in your clinic's name. Booked straight into your calendar, with almost nothing on your end."),
         ("Missed-Call Text-Back",
-         "The moment a call is missed, the caller gets an instant text from you and books, instead of calling the next clinic. Runs 24/7. $1,500 setup + $250/month."),
+         "The moment a call is missed, the caller gets an instant text from you and books, instead of calling the next clinic. Runs 24/7."),
     ]:
         pdf.set_xy(20, y)
         pdf.set_font("Helvetica", "B", 11)
@@ -95,11 +95,7 @@ def build(prepared_for=None):
         pdf.set_text_color(*GRAY)
         pdf.multi_cell(W - 46, 5.5, body)
         y = pdf.get_y() + 4
-    pdf.set_xy(20, y)
-    pdf.set_font("Helvetica", "B", 10.5)
-    pdf.set_text_color(*DARK)
-    pdf.cell(0, 6, "Both services together: $2,500  (reactivation one-time + missed-call $250/month).")
-    y += 8
+    y += 2
     pdf.set_xy(20, y)
     pdf.set_font("Helvetica", "", 9.5)
     pdf.set_text_color(*GRAY)
