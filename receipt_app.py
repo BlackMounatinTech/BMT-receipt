@@ -341,25 +341,20 @@ if mode == "Company Profile":
                 if sp.exists():
                     attachments.append(sp)
                     snap_line = (
-                        "I also attached a quick revenue snapshot for clinics like yours. It lays out, in plain "
-                        "numbers, the money most practices quietly lose through dormant patients and missed calls, "
-                        "and how we get it back.\n\n"
+                        "I also attached a quick snapshot showing the revenue most clinics like yours lose through "
+                        "missed calls and patients who drift off, and how we get it back.\n\n"
                     )
             body = (
-                "Hey there,\n\n"
-                "Great talking with you. As promised, our company profile is attached so you can see exactly who "
-                "you're working with. Our BC incorporation, registered office, and the two services we run for clinics.\n\n"
+                "Hi, this is Michael with Black Mountain Technologies.\n\n"
+                "Attached is our company profile so you can see exactly who you're dealing with.\n\n"
                 + snap_line +
-                "Everything's also on our site at blackmountaintech.ca.\n\n"
-                "To get you booked in for this week, send the e-transfer to michael@blackmountaintechnologies.ca and "
-                "I'll get your setup started right away. We prefer e-transfer over card because of the 3% processing "
-                "fee, but if you need to use a card we can send you a Stripe link.\n\n"
-                "Once that's in, we'll set up a quick meeting within the next three to seven days at whatever time "
-                "works best for you, to get the software set up and everything running.\n\n"
-                "Talk soon,\n"
+                "If you'd like to talk it through, you can book a meeting on our website at blackmountaintech.ca, "
+                "reply to this email, or give us a call. Whatever's easiest.\n\n"
                 "Michael Mackrell\n"
-                "Owner & CEO, Black Mountain Technologies\n"
-                "250-254-2377, blackmountaintech.ca"
+                "Owner, Black Mountain Technologies\n"
+                "250-254-2377\n"
+                "michael@blackmountaintechnologies.ca\n"
+                "blackmountaintech.ca"
             )
             res = send_email(
                 to=prof_email,
