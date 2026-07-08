@@ -293,7 +293,35 @@ if mode == "Prospects":
     st.stop()
 
 if mode == "Company Profile":
-    st.caption("Send the company profile the second they say yes. Just an email — it fires instantly.")
+    st.caption("Send the company profile with the matching Revenue Snapshot. Pick their market, drop in the email, send.")
+
+    # --- Market pick (drives which Revenue Snapshot gets attached) ---
+    SNAP_DIR = HERE / "snapshots"
+    MARKETS = {
+        "Dental": "Revenue_Snapshot_Dental.pdf",
+        "Chiropractic": "Revenue_Snapshot_Chiropractic.pdf",
+        "Physiotherapy": "Revenue_Snapshot_Physiotherapy.pdf",
+        "Optometry": "Revenue_Snapshot_Optometry.pdf",
+        "Veterinary": "Revenue_Snapshot_Veterinary.pdf",
+        "RMT / Massage": "Revenue_Snapshot_Rmt.pdf",
+        "Naturopath": "Revenue_Snapshot_Naturopath.pdf",
+    }
+    st.write("**Their market**")
+    mcols = st.columns(4)
+    for i, name in enumerate(MARKETS):
+        if mcols[i % 4].button(name, key="mkt_" + name, use_container_width=True,
+                               type=("primary" if st.session_state.get("prof_market") == name else "secondary")):
+            st.session_state["prof_market"] = name
+    chosen_market = st.session_state.get("prof_market")
+    if chosen_market:
+        snap_path = SNAP_DIR / MARKETS[chosen_market]
+        if snap_path.exists():
+            st.success(f"Market: {chosen_market}  —  snapshot will be attached.")
+        else:
+            st.warning(f"Market: {chosen_market}  —  snapshot file not found ({MARKETS[chosen_market]}). Profile only.")
+    else:
+        st.caption("No market selected — the email will send the profile only, no snapshot.")
+
     prof_email = st.text_input("Their email", placeholder="jane@smithdental.ca")
     if st.button("Generate profile", type="primary", use_container_width=True):
         ppath = OUT / "company_profile.pdf"
@@ -308,10 +336,22 @@ if mode == "Company Profile":
         method_active = configured_method()
         send_label = "Send profile" if method_active != "none" else "Send (email not configured)"
         if st.button(send_label, use_container_width=True, disabled=(method_active == "none" or not prof_email)):
+            snap_line = ""
+            attachments = [ppath]
+            if chosen_market:
+                sp = SNAP_DIR / MARKETS[chosen_market]
+                if sp.exists():
+                    attachments.append(sp)
+                    snap_line = (
+                        "I also attached a quick revenue snapshot for clinics like yours. It lays out, in plain "
+                        "numbers, the money most practices quietly lose through dormant patients and missed calls, "
+                        "and how we get it back.\n\n"
+                    )
             body = (
                 "Hey there,\n\n"
                 "Great talking with you. As promised, our company profile is attached so you can see exactly who "
                 "you're working with. Our BC incorporation, registered office, and the two services we run for clinics.\n\n"
+                + snap_line +
                 "Everything's also on our site at blackmountaintech.ca.\n\n"
                 "To get you booked in for this week, send the e-transfer to michael@blackmountaintechnologies.ca and "
                 "I'll get your setup started right away. We prefer e-transfer over card because of the 3% processing "
@@ -327,7 +367,7 @@ if mode == "Company Profile":
                 to=prof_email,
                 subject="Black Mountain Technologies - Company Profile",
                 body_text=body,
-                attachments=[ppath],
+                attachments=attachments,
             )
             if res.get("ok"):
                 log_lead(prof_email, status="prospect")
