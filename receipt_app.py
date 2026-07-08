@@ -345,8 +345,8 @@ if mode == "Company Profile":
                         "missed calls and patients who drift off, and how we get it back.\n\n"
                     )
             body = (
-                "Hi, this is Michael with Black Mountain Technologies.\n\n"
-                "Attached is our company profile so you can see exactly who you're dealing with.\n\n"
+                "Hi, this is Michael with Black Mountain Technologies, nice talking with you today.\n\n"
+                "As promised, attached is our company profile so you can see exactly who you're dealing with.\n\n"
                 + snap_line +
                 "If you'd like to talk it through, you can book a meeting on our website at blackmountaintech.ca, "
                 "reply to this email, or give us a call. Whatever's easiest.\n\n"
