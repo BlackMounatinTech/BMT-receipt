@@ -68,8 +68,8 @@ def build(prepared_for=None):
     pdf.set_text_color(*DARK)
     pdf.multi_cell(W - 40, 6,
         "Black Mountain Technologies is an artificial intelligence software company out of British Columbia. "
-        "We build AI technologies for appointment-based clinics to retain and reactivate clients, and to recover "
-        "the revenue they quietly lose through missed calls and patients who drift away. Everything is fully "
+        "We build AI technologies for construction companies to retain and reactivate clients, and to recover "
+        "the revenue they quietly lose through missed calls and quotes that never close. Everything is fully "
         "managed by us, in-house. Nothing is outsourced, and we keep none of your information.")
     y = pdf.get_y() + 7
 
@@ -80,10 +80,10 @@ def build(prepared_for=None):
     pdf.cell(0, 7, "What We Do")
     y += 9
     for title, body in [
-        ("Patient Reactivation",
-         "We text your dormant patient list back into the chair, in your clinic's name. Booked straight into your calendar, with almost nothing on your end."),
+        ("Client Reactivation",
+         "We text your old quotes and past clients back into the schedule, in your company's name. Booked straight into your calendar, with almost nothing on your end."),
         ("Missed-Call Text-Back",
-         "The moment a call is missed, the caller gets an instant text from you and books, instead of calling the next clinic. Runs 24/7."),
+         "The moment a call is missed, the caller gets an instant text from you and books, instead of calling the next contractor. Runs 24/7."),
     ]:
         pdf.set_xy(20, y)
         pdf.set_font("Helvetica", "B", 11)

@@ -57,8 +57,8 @@ LINE = (214, 218, 220); GREEN = (34, 110, 60)
 
 # The services + pricing (matches the contract + one-pager)
 SERVICES = {
-    "Patient Reactivation Campaign (one-time)": {"amount": 1500, "monthly": 0,
-        "desc": "A done-for-you campaign that reaches your past customers in your name and invites them back in. Their data stays in your office. Set up and live within the week."},
+    "Client Reactivation Campaign (one-time)": {"amount": 1500, "monthly": 0,
+        "desc": "A done-for-you campaign that reaches your old quotes and past clients in your name and invites them back in. Their data stays with you. Set up and live within the week."},
     "Missed-Call Text-Back (setup)": {"amount": 1500, "monthly": 250,
         "desc": "An AI system that automatically texts back anyone whose call you miss, in your name, so they hear from you before they try the next place."},
     "Package AI - Reactivation + Missed-Call Text-Back (setup)": {"amount": 2500, "monthly": 250,
@@ -201,8 +201,8 @@ def make_profile_pdf(path):
     pdf.set_x(M); pdf.set_font("Helvetica", "", 11); pdf.set_text_color(*INK)
     pdf.multi_cell(W-2*M, 6, _ascii(
         "Black Mountain Technologies is an artificial intelligence software company out of British Columbia. "
-        "We build AI technologies for appointment-based clinics to retain and reactivate clients, and to recover "
-        "the revenue they quietly lose through missed calls and patients who drift away. Everything is fully "
+        "We build AI technologies for construction companies to win back and reactivate clients, and to recover "
+        "the revenue they quietly lose through missed calls and quotes that never close. Everything is fully "
         "managed by us, in-house. Nothing is outsourced, and we keep none of your information."))
     pdf.ln(4)
 
@@ -210,10 +210,10 @@ def make_profile_pdf(path):
     pdf.set_x(M); pdf.set_font("Helvetica", "B", 13); pdf.set_text_color(*INK)
     pdf.cell(0, 7, "What We Do", new_x="LMARGIN", new_y="NEXT")
     for title, body in [
-        ("Patient Reactivation",
-         "We text your dormant patient list back into the chair, in your clinic's name. Booked straight into your calendar, with almost nothing on your end."),
+        ("Client Reactivation",
+         "We text your old quotes and past clients back into the pipeline, in your company's name. Booked straight onto your calendar, with almost nothing on your end."),
         ("Missed-Call Text-Back",
-         "The moment a call is missed, the caller gets an instant text from you and books, instead of calling the next clinic. Runs 24/7."),
+         "The moment a call is missed, the caller gets an instant text from you and books an estimate, instead of calling the next contractor. Runs 24/7."),
     ]:
         pdf.set_x(M); pdf.set_font("Helvetica", "B", 11); pdf.set_text_color(*INK)
         pdf.cell(0, 6, f"-  {title}", new_x="LMARGIN", new_y="NEXT")
@@ -295,14 +295,17 @@ if mode == "Company Profile":
 
     # --- Market pick (drives which Revenue Snapshot gets attached) ---
     SNAP_DIR = HERE / "snapshots"
+    # ICP: BC construction companies, ~$250K-$2M/yr, NOT the North Island
+    # (excludes Comox, Cumberland, Courtenay, Campbell River). Buttons = trades.
     MARKETS = {
-        "Dental": "Revenue_Snapshot_Dental.pdf",
-        "Chiropractic": "Revenue_Snapshot_Chiropractic.pdf",
-        "Physiotherapy": "Revenue_Snapshot_Physiotherapy.pdf",
-        "Optometry": "Revenue_Snapshot_Optometry.pdf",
-        "Veterinary": "Revenue_Snapshot_Veterinary.pdf",
-        "RMT / Massage": "Revenue_Snapshot_Rmt.pdf",
-        "Naturopath": "Revenue_Snapshot_Naturopath.pdf",
+        "Excavation": "Revenue_Snapshot_Excavation.pdf",
+        "Concrete": "Revenue_Snapshot_Concrete.pdf",
+        "Roofing": "Revenue_Snapshot_Roofing.pdf",
+        "HVAC": "Revenue_Snapshot_HVAC.pdf",
+        "Plumbing": "Revenue_Snapshot_Plumbing.pdf",
+        "Framing": "Revenue_Snapshot_Framing.pdf",
+        "Drywall": "Revenue_Snapshot_Drywall.pdf",
+        "Painting": "Revenue_Snapshot_Painting.pdf",
     }
     st.write("**Their market**")
     mcols = st.columns(4)
@@ -320,7 +323,7 @@ if mode == "Company Profile":
     else:
         st.caption("No market selected — the email will send the profile only, no snapshot.")
 
-    prof_email = st.text_input("Their email", placeholder="jane@smithdental.ca")
+    prof_email = st.text_input("Their email", placeholder="jane@smithcontracting.ca")
     if st.button("Generate profile", type="primary", use_container_width=True):
         ppath = OUT / "company_profile.pdf"
         make_profile_pdf(ppath)
@@ -341,8 +344,8 @@ if mode == "Company Profile":
                 if sp.exists():
                     attachments.append(sp)
                     snap_line = (
-                        "I also attached a quick snapshot showing the revenue most clinics like yours lose through "
-                        "missed calls and patients who drift off, and how we get it back.\n\n"
+                        "I also attached a quick snapshot showing what a company your size typically loses to missed "
+                        "calls and dead quotes, and exactly how we get it back.\n\n"
                     )
             body = (
                 "Hi, this is Michael with Black Mountain Technologies, nice talking with you today.\n\n"
@@ -389,10 +392,10 @@ else:
     service_detail = svc.get("desc", "")
     st.info(f"Amount: ${amount:,.2f}" + (f"  •  then ${monthly:,.0f}/mo" if monthly else ""))
 
-clinic = st.text_input("Company name", placeholder="Smith Family Dental")
+clinic = st.text_input("Company name", placeholder="Smith Contracting Ltd.")
 payer = st.text_input("Name of person who authorized payment", placeholder="Dr. Jane Smith")
 company_address = st.text_input("Company address", placeholder="123 Main St, Campbell River, BC")
-to_email = st.text_input("Company email", placeholder="jane@smithdental.ca")
+to_email = st.text_input("Company email", placeholder="jane@smithcontracting.ca")
 company_phone = st.text_input("Company phone", placeholder="250-555-1234")
 c1, c2 = st.columns(2)
 date_str = c1.date_input("Date", dt.date.today()).strftime("%Y-%m-%d")
