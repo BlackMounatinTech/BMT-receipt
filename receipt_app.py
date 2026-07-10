@@ -324,6 +324,16 @@ if mode == "Company Profile":
         st.caption("No market selected — the email will send the profile only, no snapshot.")
 
     prof_email = st.text_input("Their email", placeholder="jane@smithcontracting.ca")
+
+    # --- Optional: lock in a meeting date + time (goes in the email so it's fixed in their brain) ---
+    add_meeting = st.checkbox("Lock in a meeting time")
+    meet_date = meet_time = meet_link = None
+    if add_meeting:
+        mc1, mc2 = st.columns(2)
+        meet_date = mc1.date_input("Meeting date")
+        meet_time = mc2.time_input("Meeting time", value=dt.time(10, 30))
+        meet_link = st.text_input("Google Meet link (optional)", placeholder="https://meet.google.com/xxx-xxxx-xxx")
+
     if st.button("Generate profile", type="primary", use_container_width=True):
         ppath = OUT / "company_profile.pdf"
         make_profile_pdf(ppath)
@@ -347,10 +357,24 @@ if mode == "Company Profile":
                         "I also attached a quick snapshot showing what a company your size typically loses to missed "
                         "calls and dead quotes, and exactly how we get it back.\n\n"
                     )
+            # meeting line (only when a time was locked in)
+            meeting_line = ""
+            subject = "Black Mountain Technologies - Company Profile"
+            if add_meeting and meet_date and meet_time:
+                when = f"{meet_date.strftime('%A, %B %-d')} at {meet_time.strftime('%-I:%M %p')}"
+                meeting_line = f"Our meeting is confirmed for {when}. "
+                if meet_link:
+                    meeting_line += f"Here is the link to join: {meet_link}"
+                else:
+                    meeting_line += "I will send the meeting link before then."
+                meeting_line += "\n\n"
+                subject = "Black Mountain Technologies - Company Profile + Meeting Confirmation"
+
             body = (
                 "Hi, this is Michael with Black Mountain Technologies, nice talking with you today.\n\n"
                 "As promised, attached is our company profile so you can see exactly who you're dealing with.\n\n"
-                + snap_line +
+                + snap_line
+                + meeting_line +
                 "If you'd like to talk it through, you can book a meeting on our website at blackmountaintech.ca, "
                 "reply to this email, or give us a call. Whatever's easiest.\n\n"
                 "Michael Mackrell\n"
@@ -361,7 +385,7 @@ if mode == "Company Profile":
             )
             res = send_email(
                 to=prof_email,
-                subject="Black Mountain Technologies - Company Profile",
+                subject=subject,
                 body_text=body,
                 attachments=attachments,
             )
