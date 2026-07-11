@@ -327,12 +327,13 @@ if mode == "Company Profile":
 
     # --- Optional: lock in a meeting date + time (goes in the email so it's fixed in their brain) ---
     add_meeting = st.checkbox("Lock in a meeting time")
-    meet_date = meet_time = meet_link = None
+    meet_name = meet_date = meet_time = meet_link = None
     if add_meeting:
+        meet_name = st.text_input("Their name (for the greeting)", placeholder="Harmon")
         mc1, mc2 = st.columns(2)
         meet_date = mc1.date_input("Meeting date")
         meet_time = mc2.time_input("Meeting time", value=dt.time(10, 30))
-        meet_link = st.text_input("Google Meet link (optional)", placeholder="https://meet.google.com/xxx-xxxx-xxx")
+        meet_link = st.text_input("Meeting link (optional)", placeholder="https://zoom.us/j/xxxx  or  https://meet.google.com/xxx")
 
     if st.button("Generate profile", type="primary", use_container_width=True):
         ppath = OUT / "company_profile.pdf"
@@ -360,18 +361,22 @@ if mode == "Company Profile":
             # meeting line (only when a time was locked in)
             meeting_line = ""
             subject = "Black Mountain Technologies - Company Profile"
+            greeting = "Hi, this is Michael with Black Mountain Technologies, nice talking with you today."
             if add_meeting and meet_date and meet_time:
                 when = f"{meet_date.strftime('%A, %B %-d')} at {meet_time.strftime('%-I:%M %p')}"
+                if meet_name and meet_name.strip():
+                    greeting = (f"Hi {meet_name.strip()}, this is Michael with Black Mountain Technologies, "
+                                "nice talking with you today.")
                 meeting_line = f"Our meeting is confirmed for {when}. "
                 if meet_link:
-                    meeting_line += f"Here is the link to join: {meet_link}"
+                    meeting_line += f"I'll remind you the night before and here is the link to join: {meet_link}"
                 else:
-                    meeting_line += "I will send the meeting link before then."
+                    meeting_line += "I'll remind you the night before and send you the meeting link."
                 meeting_line += "\n\n"
                 subject = "Black Mountain Technologies - Company Profile + Meeting Confirmation"
 
             body = (
-                "Hi, this is Michael with Black Mountain Technologies, nice talking with you today.\n\n"
+                greeting + "\n\n"
                 "As promised, attached is our company profile so you can see exactly who you're dealing with.\n\n"
                 + snap_line
                 + meeting_line +
