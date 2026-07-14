@@ -385,7 +385,7 @@ if mode == "Company Profile":
                 "michael@blackmountaintechnologies.ca"
             )
             greet_name = (meet_name or "").strip() if audience == "owner" else ""
-            hi = f"Hi {greet_name}," if greet_name else "Hi,"
+            hi = f"Hey {greet_name}," if greet_name else "Hey,"
             opener = f"{hi}\n\nThis is Michael at Black Mountain Technologies. Nice talking with you today.\n\n"
 
             if audience == "gatekeeper":
