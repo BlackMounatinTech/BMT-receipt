@@ -325,8 +325,27 @@ if mode == "Company Profile":
 
     prof_email = st.text_input("Their email", placeholder="jane@smithcontracting.ca")
 
-    # --- Optional: lock in a meeting date + time (goes in the email so it's fixed in their brain) ---
-    add_meeting = st.checkbox("Lock in a meeting time")
+    # --- WHO am I sending to? Owner (already sold, confirm the meeting) vs Gatekeeper (arm them to push it up the chain) ---
+    st.write("**Who are you sending to?**")
+    wcols = st.columns(2)
+    if wcols[0].button("Owner", key="aud_owner", use_container_width=True,
+                       type=("primary" if st.session_state.get("prof_audience") == "owner" else "secondary")):
+        st.session_state["prof_audience"] = "owner"
+    if wcols[1].button("Gatekeeper", key="aud_gate", use_container_width=True,
+                       type=("primary" if st.session_state.get("prof_audience") == "gatekeeper" else "secondary")):
+        st.session_state["prof_audience"] = "gatekeeper"
+    audience = st.session_state.get("prof_audience", "owner")
+    st.caption(f"Sending the **{audience}** version.")
+
+    # Gatekeeper needs the owner's name + the company name to fill the copy
+    owner_name = company_name = None
+    if audience == "gatekeeper":
+        gc1, gc2 = st.columns(2)
+        owner_name = gc1.text_input("Owner's name (optional)", placeholder="Dave")
+        company_name = gc2.text_input("Company name (optional)", placeholder="Smith Contracting")
+
+    # --- Owner version: lock in the meeting date + time (the whole point of the owner email is to confirm it) ---
+    add_meeting = st.checkbox("Lock in a meeting time", value=(audience == "owner"))
     meet_name = meet_date = meet_time = meet_link = None
     if add_meeting:
         meet_name = st.text_input("Their name (for the greeting)", placeholder="Harmon")
@@ -348,46 +367,70 @@ if mode == "Company Profile":
         method_active = configured_method()
         send_label = "Send profile" if method_active != "none" else "Send (email not configured)"
         if st.button(send_label, use_container_width=True, disabled=(method_active == "none" or not prof_email)):
-            snap_line = ""
             attachments = [ppath]
+            # Gatekeeper always carries the trade snapshot (it's their ammo upstairs); owner carries it only if a market's picked.
+            snap_attached = False
             if chosen_market:
                 sp = SNAP_DIR / MARKETS[chosen_market]
                 if sp.exists():
                     attachments.append(sp)
-                    snap_line = (
-                        "I also attached a quick snapshot showing what a company your size typically loses to missed "
-                        "calls and dead quotes, and exactly how we get it back.\n\n"
-                    )
-            # meeting line (only when a time was locked in)
-            meeting_line = ""
-            subject = "Black Mountain Technologies - Company Profile"
-            greeting = "Hi, this is Michael with Black Mountain Technologies, nice talking with you today."
-            if add_meeting and meet_date and meet_time:
-                when = f"{meet_date.strftime('%A, %B %-d')} at {meet_time.strftime('%-I:%M %p')}"
-                if meet_name and meet_name.strip():
-                    greeting = (f"Hi {meet_name.strip()}, this is Michael with Black Mountain Technologies, "
-                                "nice talking with you today.")
-                meeting_line = f"Our meeting is confirmed for {when}. "
-                if meet_link:
-                    meeting_line += f"I'll remind you the night before and here is the link to join: {meet_link}"
-                else:
-                    meeting_line += "I'll remind you the night before and send you the meeting link."
-                meeting_line += "\n\n"
-                subject = "Black Mountain Technologies - Company Profile + Meeting Confirmation"
+                    snap_attached = True
 
-            body = (
-                greeting + "\n\n"
-                "As promised, attached is our company profile so you can see exactly who you're dealing with.\n\n"
-                + snap_line
-                + meeting_line +
-                "If you'd like to talk it through, you can book a meeting on our website at blackmountaintech.ca, "
-                "reply to this email, or give us a call. Whatever's easiest.\n\n"
+            SIG = (
+                "Regards,\n"
                 "Michael Mackrell\n"
                 "Owner, Black Mountain Technologies\n"
                 "250-254-2377\n"
-                "michael@blackmountaintechnologies.ca\n"
-                "blackmountaintech.ca"
+                "blackmountaintech.ca\n"
+                "michael@blackmountaintechnologies.ca"
             )
+            greet_name = (meet_name or "").strip() if audience == "owner" else ""
+            hi = f"Hi {greet_name}," if greet_name else "Hi,"
+            opener = f"{hi}\n\nThis is Michael at Black Mountain Technologies. Nice talking with you today.\n\n"
+
+            if audience == "gatekeeper":
+                # --- GATEKEEPER VERSION: arm them to push it up the chain ---
+                subject = (f"For {owner_name.strip()} whenever he has a minute"
+                           if owner_name and owner_name.strip()
+                           else "Black Mountain Technologies - for the owner whenever he has a minute")
+                trade = (chosen_market or "construction").lower()
+                who = owner_name.strip() if (owner_name and owner_name.strip()) else "the owner"
+                whose = company_name.strip() if (company_name and company_name.strip()) else "your company"
+                body = (
+                    opener +
+                    "Attached is our company profile so you can see exactly who you are going to be working with.\n\n"
+                    f"Here is the short version so you know what it is. Companies in {trade} miss roughly 1 in 5 of "
+                    "their job calls because the crew is out on a site, and every missed caller just phones the next "
+                    "company. Over a year that adds up to tens of thousands of dollars walking out the door, and the "
+                    "attached sheet shows the exact numbers.\n\n"
+                    f"We fix it with a system that texts every missed caller back in seconds, so the job books with "
+                    f"{whose} instead of the competition, and it runs completely on its own. No management or IT skills "
+                    "required at the company. This is an extremely easy and proven way to increase revenue, build "
+                    "reputation, take work off everyone's plate, and add some peace of mind. The setup and onboarding "
+                    "are simple, and the value far outweighs the cost.\n\n"
+                    f"Getting this in front of {who} would be a smart move, whoever brings this to the table is going "
+                    "to look very good for it.\n\n"
+                    "If you would like to talk to us, you can book a meeting on our website, reply to this email, or "
+                    "give us a call.\n\n"
+                    + SIG
+                )
+            else:
+                # --- OWNER VERSION: meeting already booked, confirm it and get out. No re-selling. ---
+                subject = "Black Mountain Technologies - Company Profile"
+                meeting_line = ""
+                if add_meeting and meet_date and meet_time:
+                    when = f"{meet_date.strftime('%A, %B %-d')} at {meet_time.strftime('%-I:%M %p')}"
+                    subject = f"Confirmed, {when}"
+                    meeting_line = f"Here is the day and time we locked in for that quick meeting: {when}."
+                    if meet_link:
+                        meeting_line += f" Here is the link to join: {meet_link}"
+                    meeting_line += "\n\n"
+                body = (
+                    opener +
+                    "Attached is our company profile so you can see exactly who you are going to be working with.\n\n"
+                    + meeting_line
+                    + SIG
+                )
             res = send_email(
                 to=prof_email,
                 subject=subject,
