@@ -43,6 +43,21 @@ def _save_leads(rows):
 def _today():
     return dt.datetime.now().strftime("%Y-%m-%d")
 
+# Clean list of times (every 15 min, 6am-8pm) for a simple dropdown — no clunky time_input box.
+TIME_CHOICES = []
+for _h in range(6, 21):
+    for _m in (0, 15, 30, 45):
+        TIME_CHOICES.append(dt.time(_h, _m))
+def _fmt_time(t):
+    return t.strftime("%-I:%M %p")
+def _nearest_time_index(t):
+    """Index of the closest choice to a given time (for prefill)."""
+    best_i, best_d = 0, 10**9
+    for i, c in enumerate(TIME_CHOICES):
+        d = abs((c.hour*60+c.minute) - (t.hour*60+t.minute))
+        if d < best_d: best_i, best_d = i, d
+    return best_i
+
 def get_lead(email):
     email = (email or "").strip().lower()
     for r in _load_leads():
@@ -326,31 +341,41 @@ h1,h2,h3,h4,h5,h6, .stRadio label, [data-testid="stWidgetLabel"] { color: var(--
 .stTextInput input:focus, .stNumberInput input:focus {
   border-color:var(--blue) !important; box-shadow:0 0 0 3px rgba(59,130,246,.22) !important;
 }
-/* selectbox / dropdowns dark */
-div[data-baseweb="select"] > div {
+/* selectbox / time / date FIELDS — dark bg, light text (the value shown in the closed box) */
+div[data-baseweb="select"] > div,
+div[data-baseweb="select"] > div > div,
+div[data-baseweb="input"] {
   border-radius:12px !important; border:1.5px solid var(--line) !important;
   background:var(--card) !important; color:var(--ink) !important; font-size:16px !important;
 }
-div[data-baseweb="select"] * { color:var(--ink) !important; }
-ul[role="listbox"], div[data-baseweb="popover"] * { background:var(--card) !important; color:var(--ink) !important; }
+div[data-baseweb="select"] *, div[data-baseweb="input"] * { color:var(--ink) !important; }
+/* make time/date/select inputs fill their column — kill the wasted empty box */
+.stTimeInput div[data-baseweb="select"],
+.stDateInput div[data-baseweb="input"],
+.stSelectbox div[data-baseweb="select"],
+.stTimeInput > div, .stDateInput > div, .stSelectbox > div { width:100% !important; }
 
-/* ALL popover menus (time picker, date picker, select dropdowns) — light text on dark */
-div[data-baseweb="popover"], div[data-baseweb="popover"] ul, div[data-baseweb="popover"] li {
-  background:var(--card) !important; color:var(--ink) !important;
+/* ANY popup/dropdown/menu that overlays the page — force light text on dark.
+   Streamlit renders these in a portal at the END of the body, so target broadly. */
+div[data-baseweb="popover"] *,
+div[data-baseweb="menu"] *,
+div[data-baseweb="calendar"] *,
+ul[role="listbox"] *,
+[role="option"],
+[data-baseweb="popover"] li,
+[data-baseweb="menu"] li {
+  color:#f2f5f9 !important;
 }
-div[data-baseweb="popover"] li { padding:8px 12px !important; }
-div[data-baseweb="popover"] li:hover { background:#2a3345 !important; }
-/* time input specifically — the dropdown list options */
-div[data-baseweb="menu"], div[data-baseweb="menu"] * ,
-ul[role="listbox"] li, li[role="option"] {
-  background:var(--card) !important; color:var(--ink) !important;
+div[data-baseweb="popover"] > div,
+div[data-baseweb="menu"],
+ul[role="listbox"],
+div[data-baseweb="calendar"] {
+  background:#1a1f2b !important;
 }
-li[role="option"]:hover, ul[role="listbox"] li:hover { background:#2a3345 !important; }
-/* date-picker calendar */
-div[data-baseweb="calendar"], div[data-baseweb="calendar"] * {
-  background:var(--card) !important; color:var(--ink) !important;
+[role="option"]:hover, ul[role="listbox"] li:hover, [data-baseweb="menu"] li:hover {
+  background:#2a3345 !important;
 }
-div[data-baseweb="calendar"] [aria-selected="true"] { background:var(--blue) !important; color:#fff !important; }
+div[data-baseweb="calendar"] [aria-selected="true"] { background:#3b82f6 !important; color:#fff !important; }
 
 /* BUTTONS — tactile / clicky, dark base, press-down on tap */
 .stButton > button, .stDownloadButton > button {
@@ -543,7 +568,8 @@ if mode == "Company Profile":
     if add_meeting:
         mc1, mc2 = st.columns(2)
         meet_date = mc1.date_input("Meeting date")
-        meet_time = mc2.time_input("Meeting time", value=dt.time(10, 30))
+        meet_time = mc2.selectbox("Meeting time", TIME_CHOICES,
+                                  index=_nearest_time_index(dt.time(10, 30)), format_func=_fmt_time)
         st.caption("The Zoom/Meet link is NOT sent now — it goes out the day before from the Meeting Reminder tab.")
 
     if st.button("Generate profile", type="primary", use_container_width=True):
@@ -682,7 +708,8 @@ if mode == "Meeting Reminder":
     rem_email = st.text_input("Their email", value=pre_email, placeholder="harmon@company.ca")
     rc1, rc2 = st.columns(2)
     rem_date = rc1.date_input("Meeting date", value=pre_date)
-    rem_time = rc2.time_input("Meeting time", value=pre_time)
+    rem_time = rc2.selectbox("Meeting time", TIME_CHOICES, index=_nearest_time_index(pre_time),
+                             format_func=_fmt_time)
     rem_link = st.text_input("Meeting link (Zoom / Google Meet)",
                              placeholder="https://meet.google.com/xxx  or  https://zoom.us/j/xxxx")
 
