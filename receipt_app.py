@@ -334,6 +334,24 @@ div[data-baseweb="select"] > div {
 div[data-baseweb="select"] * { color:var(--ink) !important; }
 ul[role="listbox"], div[data-baseweb="popover"] * { background:var(--card) !important; color:var(--ink) !important; }
 
+/* ALL popover menus (time picker, date picker, select dropdowns) — light text on dark */
+div[data-baseweb="popover"], div[data-baseweb="popover"] ul, div[data-baseweb="popover"] li {
+  background:var(--card) !important; color:var(--ink) !important;
+}
+div[data-baseweb="popover"] li { padding:8px 12px !important; }
+div[data-baseweb="popover"] li:hover { background:#2a3345 !important; }
+/* time input specifically — the dropdown list options */
+div[data-baseweb="menu"], div[data-baseweb="menu"] * ,
+ul[role="listbox"] li, li[role="option"] {
+  background:var(--card) !important; color:var(--ink) !important;
+}
+li[role="option"]:hover, ul[role="listbox"] li:hover { background:#2a3345 !important; }
+/* date-picker calendar */
+div[data-baseweb="calendar"], div[data-baseweb="calendar"] * {
+  background:var(--card) !important; color:var(--ink) !important;
+}
+div[data-baseweb="calendar"] [aria-selected="true"] { background:var(--blue) !important; color:#fff !important; }
+
 /* BUTTONS — tactile / clicky, dark base, press-down on tap */
 .stButton > button, .stDownloadButton > button {
   border-radius:13px !important; font-weight:700 !important; font-size:15px !important;
