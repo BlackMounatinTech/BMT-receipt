@@ -16,33 +16,63 @@ LOGO = HERE / "assets_logo.png"
 OUT = HERE / ".tmp"
 OUT.mkdir(exist_ok=True)
 
-# --- simple CRM log (email -> prospect/client) ---
+# --- CRM: company profiles (email -> full record + history) ---
 import csv as _csv
 LEADS = HERE / "leads_log.csv"
+FIELDS = ["email", "clinic", "contact_name", "trade", "status",
+          "meeting_date", "meeting_time", "first_contact", "history", "notes"]
 
 def _load_leads():
     if not LEADS.exists():
         return []
     with open(LEADS, newline="", encoding="utf-8") as f:
-        return list(_csv.DictReader(f))
+        rows = list(_csv.DictReader(f))
+    # backfill any new columns on old rows so nothing breaks
+    for r in rows:
+        for k in FIELDS:
+            r.setdefault(k, "")
+    return rows
 
 def _save_leads(rows):
     with open(LEADS, "w", newline="", encoding="utf-8") as f:
-        w = _csv.DictWriter(f, fieldnames=["email", "clinic", "status", "first_contact", "notes"])
-        w.writeheader(); w.writerows(rows)
+        w = _csv.DictWriter(f, fieldnames=FIELDS)
+        w.writeheader()
+        for r in rows:
+            w.writerow({k: r.get(k, "") for k in FIELDS})
 
-def log_lead(email, clinic="", status="prospect"):
+def _today():
+    return dt.datetime.now().strftime("%Y-%m-%d")
+
+def get_lead(email):
+    email = (email or "").strip().lower()
+    for r in _load_leads():
+        if r["email"] == email:
+            return r
+    return None
+
+def log_lead(email, clinic="", status="prospect", contact_name="", trade="",
+             meeting_date="", meeting_time="", event=""):
+    """Upsert a company profile. `event` gets appended to the history timeline."""
     email = (email or "").strip().lower()
     if not email:
         return
     rows = _load_leads()
+    stamp = _today()
     for r in rows:
         if r["email"] == email:
-            if clinic and not r.get("clinic"):
-                r["clinic"] = clinic
+            if clinic and not r.get("clinic"): r["clinic"] = clinic
+            if contact_name and not r.get("contact_name"): r["contact_name"] = contact_name
+            if trade: r["trade"] = trade
+            if meeting_date: r["meeting_date"] = meeting_date
+            if meeting_time: r["meeting_time"] = meeting_time
+            if status: r["status"] = status
+            if event:
+                r["history"] = ((r.get("history", "") + " | ") if r.get("history") else "") + f"{stamp}: {event}"
             _save_leads(rows); return
-    rows.append({"email": email, "clinic": clinic, "status": status,
-                 "first_contact": dt.datetime.now().strftime("%Y-%m-%d"), "notes": ""})
+    rows.append({"email": email, "clinic": clinic, "contact_name": contact_name,
+                 "trade": trade, "status": status, "meeting_date": meeting_date,
+                 "meeting_time": meeting_time, "first_contact": stamp,
+                 "history": (f"{stamp}: {event}" if event else ""), "notes": ""})
     _save_leads(rows)
 
 def set_status(email, status):
@@ -254,40 +284,178 @@ def make_profile_pdf(path):
 
 
 # ---------------- UI ----------------
-st.set_page_config(page_title="BMT Tools", page_icon="🧾")
-st.title("BMT Tools")
+st.set_page_config(page_title="BMT Tools", page_icon="⛰️", layout="centered",
+                   initial_sidebar_state="collapsed")
 
-mode = st.radio("What do you need?", ["Receipt", "Company Profile", "Prospects"], horizontal=True)
-st.divider()
+# --- Sleek DARK mobile-first theme with tactile buttons (forced dark so text always reads) ---
+st.markdown("""
+<style>
+:root {
+  --blue:#3b82f6; --blue-d:#2563eb;
+  --bg:#0d1017; --bg2:#12161f; --card:#1a1f2b; --card2:#20263400;
+  --ink:#f2f5f9; --muted:#9aa4b2; --line:#2b3444;
+}
+/* force everything dark + light text */
+.stApp, body { background: var(--bg) !important; color: var(--ink) !important; }
+.block-container { padding-top: 1.1rem; padding-bottom: 4rem; max-width: 640px; }
+#MainMenu, footer, header { visibility: hidden; }
+html, body, [class*="css"] { -webkit-tap-highlight-color: transparent; }
+/* make ALL default text light so nothing is invisible */
+.stApp, .stMarkdown, .stMarkdown p, label, .stCaption, p, span, div,
+h1,h2,h3,h4,h5,h6, .stRadio label, [data-testid="stWidgetLabel"] { color: var(--ink) !important; }
+.stCaption, small, [data-testid="stCaptionContainer"] { color: var(--muted) !important; }
 
-if mode == "Prospects":
+/* hero header */
+.bmt-hero {
+  background: linear-gradient(135deg, #1a2234 0%, #10151f 100%);
+  color:#fff; border-radius:18px; padding:20px 22px; margin-bottom:18px;
+  border:1px solid var(--line);
+  box-shadow:0 10px 30px rgba(0,0,0,.45);
+}
+.bmt-hero h1 { font-size:1.35rem; font-weight:800; margin:0; letter-spacing:-.01em; color:#fff !important; }
+.bmt-hero p { margin:.25rem 0 0; font-size:.85rem; color:#aab3c2 !important; }
+
+/* inputs — dark fields, light text, big tap targets */
+.stTextInput input, .stNumberInput input, .stDateInput input, .stTimeInput input {
+  border-radius:12px !important; border:1.5px solid var(--line) !important;
+  padding:12px 14px !important; font-size:16px !important;
+  background:var(--card) !important; color:var(--ink) !important;
+  transition:border-color .15s ease, box-shadow .15s ease;
+}
+.stTextInput input::placeholder, .stNumberInput input::placeholder { color:#6b7688 !important; }
+.stTextInput input:focus, .stNumberInput input:focus {
+  border-color:var(--blue) !important; box-shadow:0 0 0 3px rgba(59,130,246,.22) !important;
+}
+/* selectbox / dropdowns dark */
+div[data-baseweb="select"] > div {
+  border-radius:12px !important; border:1.5px solid var(--line) !important;
+  background:var(--card) !important; color:var(--ink) !important; font-size:16px !important;
+}
+div[data-baseweb="select"] * { color:var(--ink) !important; }
+ul[role="listbox"], div[data-baseweb="popover"] * { background:var(--card) !important; color:var(--ink) !important; }
+
+/* BUTTONS — tactile / clicky, dark base, press-down on tap */
+.stButton > button, .stDownloadButton > button {
+  border-radius:13px !important; font-weight:700 !important; font-size:15px !important;
+  padding:13px 18px !important; border:1.5px solid var(--line) !important;
+  background:var(--card) !important; color:var(--ink) !important;
+  box-shadow:0 3px 0 #0a0d13, 0 6px 16px rgba(0,0,0,.4) !important;
+  transition:transform .06s ease, box-shadow .12s ease, background .15s ease !important;
+}
+.stButton > button:hover, .stDownloadButton > button:hover {
+  transform:translateY(-1px); border-color:#3a4658 !important;
+  box-shadow:0 5px 0 #0a0d13, 0 10px 22px rgba(0,0,0,.5) !important;
+}
+.stButton > button:active, .stDownloadButton > button:active {
+  transform:translateY(3px);
+  box-shadow:0 0 0 #0a0d13, inset 0 2px 8px rgba(0,0,0,.5) !important;
+}
+/* primary = blue gradient, clicky */
+.stButton > button[kind="primary"], .stButton > button[data-testid="baseButton-primary"] {
+  background:linear-gradient(180deg,var(--blue) 0%,var(--blue-d) 100%) !important;
+  color:#fff !important; border:none !important;
+  box-shadow:0 4px 0 #1e4fb8, 0 10px 24px rgba(37,99,235,.5) !important;
+}
+.stButton > button[kind="primary"]:active {
+  transform:translateY(4px);
+  box-shadow:0 0 0 #1e4fb8, inset 0 3px 10px rgba(0,0,0,.4) !important;
+}
+
+/* profile cards */
+.bmt-card {
+  background:var(--card); border:1.5px solid var(--line); border-radius:15px;
+  padding:15px 16px; margin-bottom:12px; box-shadow:0 2px 12px rgba(0,0,0,.35);
+}
+.bmt-card .nm { font-weight:800; font-size:1rem; color:var(--ink) !important; }
+.bmt-card .em { font-size:.83rem; color:var(--muted) !important; }
+.bmt-chip { display:inline-block; background:#22304d; color:#8fb4ff !important;
+  font-size:.72rem; font-weight:700; padding:3px 9px; border-radius:999px; margin-right:6px; }
+.bmt-chip.win { background:#16351f; color:#5fd98a !important; }
+.bmt-hist { font-size:.78rem; color:var(--muted) !important; margin-top:8px; line-height:1.5; }
+
+/* metrics */
+div[data-testid="stMetricValue"] { font-size:1.6rem; font-weight:800; color:var(--ink) !important; }
+div[data-testid="stMetricLabel"] { color:var(--muted) !important; }
+div[data-testid="stMetric"] { background:var(--card); border:1px solid var(--line);
+  border-radius:14px; padding:12px 14px; }
+
+/* top nav radio = pill tabs */
+div[role="radiogroup"] { gap:8px; flex-wrap:wrap; }
+div[role="radiogroup"] label {
+  background:var(--card) !important; border:1.5px solid var(--line); border-radius:11px;
+  padding:9px 14px; font-weight:700; font-size:14px; transition:all .12s ease;
+}
+div[role="radiogroup"] label:hover { border-color:var(--blue); }
+</style>
+""", unsafe_allow_html=True)
+
+st.markdown(
+    '<div class="bmt-hero"><h1>⛰️ Black Mountain Tools</h1>'
+    '<p>Profiles · receipts · meeting reminders — send in one tap</p></div>',
+    unsafe_allow_html=True)
+
+mode = st.radio("What do you need?", ["Company Profile", "Meeting Reminder", "Receipt", "Profiles"],
+                horizontal=True, label_visibility="collapsed")
+st.write("")
+
+def _profile_card(r, key_prefix):
+    """Render one company profile as a card with name, trade, meeting, and history."""
+    name = r.get("contact_name") or ""
+    company = r.get("clinic") or ""
+    title = company or name or r["email"]
+    sub = (name + "  ·  " if name and company else "") + r["email"]
+    is_client = r.get("status") == "client"
+    chips = ""
+    if r.get("trade"):
+        chips += f'<span class="bmt-chip">{r["trade"]}</span>'
+    if r.get("meeting_date"):
+        mt = r.get("meeting_time", "")
+        chips += f'<span class="bmt-chip">📅 {r["meeting_date"]}{(" " + mt) if mt else ""}</span>'
+    chips += (f'<span class="bmt-chip win">Client</span>' if is_client
+              else '<span class="bmt-chip">Prospect</span>')
+    hist = r.get("history", "")
+    hist_html = f'<div class="bmt-hist">{hist.replace(" | ", "<br>")}</div>' if hist else ""
+    st.markdown(
+        f'<div class="bmt-card"><div class="nm">{title}</div>'
+        f'<div class="em">{sub}</div><div style="margin-top:8px">{chips}</div>'
+        f'{hist_html}</div>', unsafe_allow_html=True)
+    if is_client:
+        if st.button("↩ Back to prospect", key=key_prefix + "_p", use_container_width=True):
+            set_status(r["email"], "prospect"); st.rerun()
+    else:
+        if st.button("✓ Mark as client", key=key_prefix + "_c", use_container_width=True):
+            set_status(r["email"], "client"); st.rerun()
+
+if mode == "Profiles":
     rows = _load_leads()
-    prospects = [r for r in rows if r["status"] == "prospect"]
-    clients = [r for r in rows if r["status"] == "client"]
+    prospects = [r for r in rows if r.get("status") != "client"]
+    clients = [r for r in rows if r.get("status") == "client"]
     c1, c2 = st.columns(2)
     c1.metric("Prospects", len(prospects))
     c2.metric("Clients", len(clients))
+
+    q = st.text_input("Search", placeholder="Search by name, company, or email")
     if rows:
         with open(LEADS, "rb") as f:
-            st.download_button("Download full list (CSV)", f, file_name="BMT_leads.csv",
+            st.download_button("⬇ Download all (CSV)", f, file_name="BMT_profiles.csv",
                                mime="text/csv", use_container_width=True)
-    st.subheader("Prospects")
-    if not prospects:
-        st.caption("No prospects yet. Every company profile you send lands here.")
-    for r in prospects:
-        cols = st.columns([3, 2, 1.4])
-        cols[0].write(r["email"])
-        cols[1].write(r.get("clinic") or "—")
-        if cols[2].button("→ Client", key="c_" + r["email"]):
-            set_status(r["email"], "client"); st.rerun()
+
+    def _match(r):
+        if not q: return True
+        blob = " ".join([r.get("email",""), r.get("clinic",""), r.get("contact_name",""), r.get("trade","")]).lower()
+        return q.lower() in blob
+
+    st.write("")
+    st.markdown("**Prospects**")
+    shown = [r for r in prospects if _match(r)]
+    if not shown:
+        st.caption("No prospects yet. Every profile or reminder you send lands here.")
+    for i, r in enumerate(shown):
+        _profile_card(r, f"pros_{i}")
     if clients:
-        st.subheader("Clients")
-        for r in clients:
-            cols = st.columns([3, 2, 1.4])
-            cols[0].write("✅ " + r["email"])
-            cols[1].write(r.get("clinic") or "—")
-            if cols[2].button("↩ Prospect", key="p_" + r["email"]):
-                set_status(r["email"], "prospect"); st.rerun()
+        st.markdown("**Clients**")
+        for i, r in enumerate([r for r in clients if _match(r)]):
+            _profile_card(r, f"cli_{i}")
     st.stop()
 
 if mode == "Company Profile":
@@ -337,22 +505,28 @@ if mode == "Company Profile":
     audience = st.session_state.get("prof_audience", "owner")
     st.caption(f"Sending the **{audience}** version.")
 
-    # Gatekeeper needs the owner's name + the company name to fill the copy
+    # Company name (both paths); owner path always gets a name field for a personal greeting
     owner_name = company_name = None
     if audience == "gatekeeper":
         gc1, gc2 = st.columns(2)
         owner_name = gc1.text_input("Owner's name (optional)", placeholder="Dave")
         company_name = gc2.text_input("Company name (optional)", placeholder="Smith Contracting")
 
-    # --- Owner version: lock in the meeting date + time (the whole point of the owner email is to confirm it) ---
-    add_meeting = st.checkbox("Lock in a meeting time", value=(audience == "owner"))
-    meet_name = meet_date = meet_time = meet_link = None
+    # --- Their name — ALWAYS available on the owner path so even a no-meeting email opens "Hey Dave," ---
+    meet_name = meet_date = meet_time = None
+    meet_link = None  # link never sent from the profile email — reminder mode handles it
+    if audience == "owner":
+        meet_name = st.text_input("Their name (for the greeting)", placeholder="Dave")
+        company_name = st.text_input("Company name (optional)", placeholder="Smith Contracting")
+
+    # --- Optionally lock in a meeting date + time. If they didn't book, leave it off —
+    #     the email still goes out personally addressed, just without a meeting line. ---
+    add_meeting = st.checkbox("Lock in a meeting time", value=False)
     if add_meeting:
-        meet_name = st.text_input("Their name (for the greeting)", placeholder="Harmon")
         mc1, mc2 = st.columns(2)
         meet_date = mc1.date_input("Meeting date")
         meet_time = mc2.time_input("Meeting time", value=dt.time(10, 30))
-        meet_link = st.text_input("Meeting link (optional)", placeholder="https://zoom.us/j/xxxx  or  https://meet.google.com/xxx")
+        st.caption("The Zoom/Meet link is NOT sent now — it goes out the day before from the Meeting Reminder tab.")
 
     if st.button("Generate profile", type="primary", use_container_width=True):
         ppath = OUT / "company_profile.pdf"
@@ -415,20 +589,23 @@ if mode == "Company Profile":
                     + SIG
                 )
             else:
-                # --- OWNER VERSION: meeting already booked, confirm it and get out. No re-selling. ---
+                # --- OWNER VERSION: meeting already booked, confirm it and get out. No re-selling.
+                #     NO link here — the day-before reminder (separate mode) carries the link. ---
                 subject = "Black Mountain Technologies - Company Profile"
-                meeting_line = ""
                 if add_meeting and meet_date and meet_time:
+                    # meeting booked → confirm it, no re-selling
                     when = f"{meet_date.strftime('%A, %B %-d')} at {meet_time.strftime('%-I:%M %p')}"
                     subject = f"Confirmed, {when}"
-                    meeting_line = f"Here is the day and time we locked in for that quick meeting: {when}."
-                    if meet_link:
-                        meeting_line += f" Here is the link to join: {meet_link}"
-                    meeting_line += "\n\n"
+                    close_line = (f"Here is the day and time we locked in for that quick meeting: {when}. "
+                                  "I will send you the meeting link the day before.\n\n")
+                else:
+                    # NO meeting booked (warm owner who said "send me an email") → invite them to book
+                    close_line = ("If you would like to talk it through, you can book a meeting on our website, "
+                                  "reply to this email, or give me a call.\n\n")
                 body = (
                     opener +
                     "Attached is our company profile so you can see exactly who you are going to be working with.\n\n"
-                    + meeting_line
+                    + close_line
                     + SIG
                 )
             res = send_email(
@@ -438,12 +615,97 @@ if mode == "Company Profile":
                 attachments=attachments,
             )
             if res.get("ok"):
-                log_lead(prof_email, status="prospect")
-                st.success(f"Sent to {prof_email} ✅  (logged as a prospect)")
+                # save the full profile + history so this company shows in Profiles + the reminder dropdown
+                md = meet_date.strftime("%Y-%m-%d") if (add_meeting and meet_date) else ""
+                mtm = meet_time.strftime("%-I:%M %p") if (add_meeting and meet_time) else ""
+                nm = (meet_name or owner_name or "").strip()
+                ev = ("Sent profile + booked meeting" if md else
+                      ("Sent gatekeeper profile" if audience == "gatekeeper" else "Sent profile"))
+                log_lead(prof_email, status="prospect", contact_name=nm,
+                         trade=(chosen_market or ""), meeting_date=md, meeting_time=mtm,
+                         clinic=(company_name or ""), event=ev)
+                st.success(f"Sent to {prof_email} ✅  (saved to Profiles)")
             else:
                 st.error(f"Could not send: {res.get('reason','unknown error')}")
         if method_active == "none":
             st.caption("Email sending isn't set up yet. Once the Gmail app password is on Render, Send goes live.")
+    st.stop()
+
+# ==================== MEETING REMINDER + INVITE ====================
+if mode == "Meeting Reminder":
+    st.caption("Send the day-before reminder with the Zoom/Meet link. Pick a saved contact or type a new one.")
+    rows = _load_leads()
+    # anyone with a meeting booked floats to the top of the picker
+    booked = [r for r in rows if r.get("meeting_date")]
+    others = [r for r in rows if not r.get("meeting_date")]
+    picker = ["— New / type manually —"] + [
+        f'{(r.get("contact_name") or r.get("clinic") or r["email"])}  ·  {r["email"]}'
+        for r in (booked + others)
+    ]
+    pick = st.selectbox("Who are you reminding?", picker)
+
+    # prefill from the chosen saved contact
+    pre_email = pre_name = ""
+    pre_date = dt.date.today() + dt.timedelta(days=1)
+    pre_time = dt.time(10, 30)
+    if pick != picker[0]:
+        r = (booked + others)[picker.index(pick) - 1]
+        pre_email = r["email"]
+        pre_name = r.get("contact_name") or ""
+        if r.get("meeting_date"):
+            try: pre_date = dt.datetime.strptime(r["meeting_date"], "%Y-%m-%d").date()
+            except Exception: pass
+        if r.get("meeting_time"):
+            for fmt in ("%I:%M %p", "%-I:%M %p", "%H:%M"):
+                try: pre_time = dt.datetime.strptime(r["meeting_time"], fmt).time(); break
+                except Exception: pass
+
+    rem_name = st.text_input("Their name", value=pre_name, placeholder="Harmon")
+    rem_email = st.text_input("Their email", value=pre_email, placeholder="harmon@company.ca")
+    rc1, rc2 = st.columns(2)
+    rem_date = rc1.date_input("Meeting date", value=pre_date)
+    rem_time = rc2.time_input("Meeting time", value=pre_time)
+    rem_link = st.text_input("Meeting link (Zoom / Google Meet)",
+                             placeholder="https://meet.google.com/xxx  or  https://zoom.us/j/xxxx")
+
+    # tomorrow vs a dated day, phrased naturally
+    days_out = (rem_date - dt.date.today()).days
+    if days_out == 1: whenword = "tomorrow"
+    elif days_out == 0: whenword = "today"
+    else: whenword = rem_date.strftime("%A, %B %-d")
+    time_str = rem_time.strftime("%-I:%M %p")
+
+    method_active = configured_method()
+    send_label = "Send reminder + link" if method_active != "none" else "Send (email not configured)"
+    disabled = (method_active == "none" or not rem_email or not rem_link)
+    if not rem_link and rem_email:
+        st.caption("Add the meeting link to enable send.")
+
+    if st.button(send_label, type="primary", use_container_width=True, disabled=disabled):
+        hi = f"Hey {rem_name.strip()}," if rem_name.strip() else "Hey,"
+        subject = f"Reminder - our meeting {whenword} at {time_str}"
+        body = (
+            f"{hi}\n\n"
+            f"It's Michael at Black Mountain Technologies. Just reminding you of our meeting {whenword} "
+            f"at {time_str}. Looking forward to speaking with you.\n\n"
+            f"Here is the link to join: {rem_link}\n\n"
+            "Regards,\n"
+            "Michael Mackrell\n"
+            "Owner, Black Mountain Technologies\n"
+            "250-254-2377\n"
+            "blackmountaintech.ca\n"
+            "michael@blackmountaintechnologies.ca"
+        )
+        res = send_email(to=rem_email, subject=subject, body_text=body, attachments=[])
+        if res.get("ok"):
+            log_lead(rem_email, contact_name=rem_name.strip(),
+                     meeting_date=rem_date.strftime("%Y-%m-%d"), meeting_time=time_str,
+                     event=f"Sent meeting reminder + link ({whenword} {time_str})")
+            st.success(f"Reminder sent to {rem_email} ✅")
+        else:
+            st.error(f"Could not send: {res.get('reason','unknown error')}")
+    if method_active == "none":
+        st.caption("Email sending isn't set up yet. Once the Gmail app password is on Render, Send goes live.")
     st.stop()
 
 st.caption("Black Mountain Technologies — generate a branded receipt and email it on the spot.")
@@ -508,7 +770,9 @@ if st.session_state.get("pdf_path"):
             attachments=[path],
         )
         if res.get("ok"):
-            log_lead(to_email, clinic=clinic, status="client")
+            log_lead(to_email, clinic=clinic, status="client",
+                     contact_name=(payer or ""),
+                     event=f"Sent receipt {st.session_state.get('inv','')} for {service_desc}")
             st.success(f"Sent to {to_email} ✅  (logged as a client)")
         else:
             st.error(f"Could not send: {res.get('reason','unknown error')}")
