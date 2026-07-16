@@ -36,9 +36,22 @@ CLIENT_SECRET_PATH = CONFIG_DIR / "gmail_client_secret.json"
 TOKEN_PATH = CONFIG_DIR / "gmail_token.json"
 SCOPES = ["https://www.googleapis.com/auth/gmail.send"]
 
+# Fallback SMTP creds so the tool sends on Render WITHOUT needing dashboard env vars.
+# (App Password, gmail-scoped, send-only. Env vars still override these if set.)
+_FALLBACK_SMTP_USER = "michael@blackmountaintechnologies.ca"
+_FALLBACK_SMTP_PASSWORD = "hezkhdfhoinylqsm"
+
+
+def _smtp_user() -> str:
+    return (os.environ.get("SMTP_USER") or _FALLBACK_SMTP_USER).strip()
+
+
+def _smtp_password() -> str:
+    return (os.environ.get("SMTP_PASSWORD") or _FALLBACK_SMTP_PASSWORD).strip()
+
 
 def _smtp_configured() -> bool:
-    return bool(os.environ.get("SMTP_USER") and os.environ.get("SMTP_PASSWORD"))
+    return bool(_smtp_user() and _smtp_password())
 
 
 def _oauth_configured() -> bool:
@@ -89,8 +102,8 @@ def _build_email_message(sender: str, to: str, subject: str, body_text: str,
 
 def _send_via_smtp(to: str, subject: str, body_text: str,
                    attachments: Optional[List[Path]]) -> dict:
-    sender = os.environ.get("SMTP_USER", "").strip()
-    password = os.environ.get("SMTP_PASSWORD", "").strip()
+    sender = _smtp_user()
+    password = _smtp_password()
     host = os.environ.get("SMTP_HOST", "smtp.gmail.com").strip()
     port = int(os.environ.get("SMTP_PORT", "465"))
 
