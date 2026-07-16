@@ -16,9 +16,39 @@ LOGO = HERE / "assets_logo.png"
 OUT = HERE / ".tmp"
 OUT.mkdir(exist_ok=True)
 
+# --- Persistent data dir (so contacts survive Render deploys, same as the BMDW estimator) ---
+# Resolution order: BMT_DATA_DIR env -> /var/data (Render persistent disk) -> ./data (local dev).
+def _data_dir() -> Path:
+    import os as _os
+    env = _os.environ.get("BMT_DATA_DIR", "").strip()
+    if env:
+        p = Path(env)
+    else:
+        var_data = Path("/var/data")
+        try:
+            usable = var_data.exists() and _os.access(str(var_data), _os.W_OK)
+        except Exception:
+            usable = False
+        p = var_data if usable else (HERE / "data")
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+DATA_DIR = _data_dir()
+
 # --- CRM: company profiles (email -> full record + history) ---
 import csv as _csv
-LEADS = HERE / "leads_log.csv"
+LEADS = DATA_DIR / "leads_log.csv"
+
+# One-time migration: if an old leads_log.csv sits in the repo root (ephemeral),
+# copy it into the persistent data dir so nothing already saved is lost.
+_OLD_LEADS = HERE / "leads_log.csv"
+if _OLD_LEADS.exists() and not LEADS.exists():
+    try:
+        import shutil as _shutil
+        _shutil.copy2(_OLD_LEADS, LEADS)
+    except Exception:
+        pass
+
 FIELDS = ["email", "clinic", "contact_name", "trade", "status",
           "meeting_date", "meeting_time", "first_contact", "history", "notes"]
 

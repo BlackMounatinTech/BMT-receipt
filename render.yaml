@@ -15,4 +15,14 @@ services:
         sync: false
       - key: SMTP_PASSWORD
         sync: false
+      # Point the app at the persistent disk so leads_log.csv survives deploys.
+      - key: BMT_DATA_DIR
+        value: /var/data
     autoDeploy: true
+    # Persistent disk — survives EVERY deploy. Holds leads_log.csv (the contacts
+    # /prospects list) so it never gets wiped on a push again. Same setup the
+    # BMDW estimator uses. 1 GB is plenty for a single operator for years.
+    disk:
+      name: bmt-data
+      mountPath: /var/data
+      sizeGB: 1
