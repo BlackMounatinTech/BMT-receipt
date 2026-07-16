@@ -23,6 +23,14 @@ from email.message import EmailMessage
 from pathlib import Path
 from typing import List, Optional
 
+# Load a local .env if present so SMTP_USER / SMTP_PASSWORD are available.
+# (On Render, set these in the dashboard Environment tab; this just covers local + any .env.)
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+except Exception:
+    pass  # dotenv optional; Render uses dashboard env vars
+
 CONFIG_DIR = Path(__file__).resolve().parents[1] / "config"
 CLIENT_SECRET_PATH = CONFIG_DIR / "gmail_client_secret.json"
 TOKEN_PATH = CONFIG_DIR / "gmail_token.json"
