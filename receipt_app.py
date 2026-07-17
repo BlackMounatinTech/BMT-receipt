@@ -275,12 +275,10 @@ def make_profile_pdf(path):
     pdf.cell(0, 7, "Who We Are", new_x="LMARGIN", new_y="NEXT")
     pdf.set_x(M); pdf.set_font("Helvetica", "", 11); pdf.set_text_color(*INK)
     pdf.multi_cell(W-2*M, 6, _ascii(
-        "Black Mountain Technologies is an AI software company out of British Columbia, built by the team "
-        "behind Black Mountain Dirt Works, a real owner-operated construction company on Vancouver Island "
-        "(blackmountaindirtworks.net). We build for contractors as contractors, not as outsiders. Our AI wins "
-        "back and reactivates your past clients and recovers the revenue lost to missed calls and quotes that "
-        "never close. Everything is managed by us in-house, nothing is outsourced, and we keep none of your "
-        "information."))
+        "Black Mountain Technologies is an artificial intelligence software company out of British Columbia. "
+        "We build AI technologies for construction companies to win back and reactivate clients, and to recover "
+        "the revenue they quietly lose through missed calls and quotes that never close. Everything is fully "
+        "managed by us, in-house. Nothing is outsourced, and we keep none of your information."))
     pdf.ln(4)
 
     # What we do
@@ -660,6 +658,8 @@ if mode == "Company Profile":
                     "are simple, and the value far outweighs the cost.\n\n"
                     f"Getting this in front of {who} would be a smart move, whoever brings this to the table is going "
                     "to look very good for it.\n\n"
+                    "We also run a construction company ourselves, Black Mountain Dirt Works. You can take a look here: "
+                    "https://blackmountaindirtworks.net\n\n"
                     "If you would like to talk to us, you can book a meeting on our website, reply to this email, or "
                     "give us a call.\n\n"
                     + SIG
@@ -676,7 +676,9 @@ if mode == "Company Profile":
                                   "I will send you the meeting link the day before.\n\n")
                 else:
                     # NO meeting booked (warm owner who said "send me an email") → invite them to book
-                    close_line = ("If you would like to talk it through, you can book a meeting on our website, "
+                    close_line = ("We also run a construction company ourselves, Black Mountain Dirt Works. You can "
+                                  "take a look here: https://blackmountaindirtworks.net\n\n"
+                                  "If you would like to talk it through, you can book a meeting on our website, "
                                   "reply to this email, or give me a call.\n\n")
                 body = (
                     opener +
