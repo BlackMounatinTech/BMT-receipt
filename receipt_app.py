@@ -646,22 +646,16 @@ if mode == "Company Profile":
                 whose = company_name.strip() if (company_name and company_name.strip()) else "your company"
                 body = (
                     opener +
-                    "Attached is our company profile so you can see exactly who you are going to be working with.\n\n"
-                    f"Here is the short version so you know what it is. Companies in {trade} miss roughly 1 in 5 of "
-                    "their job calls because the crew is out on a site, and every missed caller just phones the next "
-                    "company. Over a year that adds up to tens of thousands of dollars walking out the door, and the "
-                    "attached sheet shows the exact numbers.\n\n"
-                    f"We fix it with a system that texts every missed caller back in seconds, so the job books with "
-                    f"{whose} instead of the competition, and it runs completely on its own. No management or IT skills "
-                    "required at the company. This is an extremely easy and proven way to increase revenue, build "
-                    "reputation, take work off everyone's plate, and add some peace of mind. The setup and onboarding "
-                    "are simple, and the value far outweighs the cost.\n\n"
-                    f"Getting this in front of {who} would be a smart move, whoever brings this to the table is going "
-                    "to look very good for it.\n\n"
-                    "We also run a construction company ourselves, Black Mountain Dirt Works. You can take a look here: "
+                    f"Here is the quick version. Companies in {trade} miss about 1 in 5 of their calls when the crew "
+                    "is out on a site, and every one of those callers just phones the next company. That's real jobs, "
+                    "and real money, going straight to your competition every single week. We stop it. The second a "
+                    f"call gets missed, our system texts that caller back in seconds, so the job books with {whose} "
+                    "instead of the next guy. It runs completely on its own. Nobody has to manage a thing.\n\n"
+                    f"The attached profile shows exactly who we are and the numbers behind it. If you can get this in "
+                    f"front of {who}, he is going to want to see it, and you'll be the one who brought it to him.\n\n"
+                    "We also run a construction company ourselves, Black Mountain Dirt Works. Take a look: "
                     "https://blackmountaindirtworks.net\n\n"
-                    "If you would like to talk to us, you can book a meeting on our website, reply to this email, or "
-                    "give us a call.\n\n"
+                    "Reply here or give us a call anytime.\n\n"
                     + SIG
                 )
             else:
