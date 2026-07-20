@@ -660,7 +660,7 @@ if mode == "Company Profile":
                 )
             else:
                 # --- OWNER VERSION: meeting already booked, confirm it and get out. No re-selling.
-                #     NO link here — the day-before reminder (separate mode) carries the link. ---
+                #     The construction-website link is in the body (legitimacy signal), booked or not. ---
                 subject = "Black Mountain Technologies - Company Profile"
                 if add_meeting and meet_date and meet_time:
                     # meeting booked → confirm it, no re-selling
@@ -670,13 +670,13 @@ if mode == "Company Profile":
                                   "I will send you the meeting link the day before.\n\n")
                 else:
                     # NO meeting booked (warm owner who said "send me an email") → invite them to book
-                    close_line = ("We also run a construction company ourselves, Black Mountain Dirt Works. You can "
-                                  "take a look here: https://blackmountaindirtworks.net\n\n"
-                                  "If you would like to talk it through, you can book a meeting on our website, "
+                    close_line = ("If you would like to talk it through, you can book a meeting on our website, "
                                   "reply to this email, or give me a call.\n\n")
                 body = (
                     opener +
-                    "Attached is our company profile so you can see exactly who you are going to be working with.\n\n"
+                    "Attached is our company profile so you can see exactly who you are going to be working with. "
+                    "We also run a construction company ourselves, Black Mountain Dirt Works, so you can see we are "
+                    "the real deal: https://blackmountaindirtworks.net\n\n"
                     + close_line
                     + SIG
                 )
