@@ -1,0 +1,14 @@
+{
+    admin off
+    auto_https off
+}
+:{$PORT} {
+    @bookingRoot path /consultation
+    redir @bookingRoot /consultation/ 308
+    handle_path /consultation/* {
+        reverse_proxy 127.0.0.1:8502
+    }
+    handle {
+        reverse_proxy 127.0.0.1:8501
+    }
+}

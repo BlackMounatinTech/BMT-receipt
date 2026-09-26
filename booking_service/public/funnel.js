@@ -1,0 +1,10 @@
+'use strict';
+const form=document.querySelector('#intake'),button=document.querySelector('#pay'),message=document.querySelector('#message');
+const currentZone=Intl.DateTimeFormat().resolvedOptions().timeZone||'America/Vancouver';
+const zones=[...new Set([currentZone,'America/Vancouver','America/Edmonton','America/Winnipeg','America/Toronto','America/Halifax','America/St_Johns','America/New_York','America/Chicago','America/Denver','America/Phoenix','America/Los_Angeles','America/Anchorage','Pacific/Honolulu',...(Intl.supportedValuesOf?Intl.supportedValuesOf('timeZone'):[])])];
+for(const zone of zones){const option=document.createElement('option');option.value=zone;option.textContent=zone.replaceAll('_',' ');document.querySelector('#timezone').append(option);}
+function notice(text){message.textContent=text;message.hidden=false;}
+if(new URLSearchParams(location.search).get('checkout')==='cancelled')notice('Checkout was cancelled. No booking has been made. You can return to payment below.');
+form.addEventListener('submit',async event=>{event.preventDefault();if(!form.reportValidity())return;button.disabled=true;button.textContent='Opening secure checkout…';try{const response=await fetch('api/checkout',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.fromEntries(new FormData(form)))});const data=await response.json();if(!response.ok)throw new Error(data.error||'Could not open checkout. Please try again.');const url=new URL(data.url);if(url.origin!==location.origin&&url.hostname!=='checkout.stripe.com')throw new Error('Unable to open secure checkout.');location.assign(url.href);}catch(error){notice(error.message);button.disabled=false;button.textContent='Continue to secure payment';message.scrollIntoView({block:'center',behavior:'smooth'});}});
+// Existing paid customers resume without entering their details or paying again.
+fetch('api/status').then(async response=>{if(!response.ok)return;const data=await response.json();if(['paid','booked','review'].includes(data.state))location.replace('book.html');}).catch(()=>{});

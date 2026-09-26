@@ -6,8 +6,9 @@ services:
     region: oregon
     plan: starter
     branch: main
-    buildCommand: pip install -r requirements.txt
-    startCommand: streamlit run receipt_app.py --server.port=$PORT --server.address=0.0.0.0 --server.headless=true
+    buildCommand: bash build.sh
+    startCommand: python serve.py
+    healthCheckPath: /consultation/health
     envVars:
       # Set the actual values in the Render dashboard (Environment tab).
       # These let the Send button email the receipt from the company Gmail.
@@ -18,6 +19,22 @@ services:
       # Point the app at the persistent disk so leads_log.csv survives deploys.
       - key: BMT_DATA_DIR
         value: /var/data
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_PRICE_ID
+        sync: false
+      - key: CAL_API_KEY
+        sync: false
+      - key: CAL_EVENT_TYPE_ID
+        sync: false
+      - key: PUBLIC_BASE_URL
+        value: https://blackmountaintech.ca/book
+      - key: DATABASE_URL
+        value: sqlite:////var/data/bmt_booking.sqlite
+      - key: PERSISTENT_SQLITE_CONFIRMED
+        value: "true"
+      - key: BOOKING_ENABLED
+        sync: false
     autoDeploy: true
     # Persistent disk — survives EVERY deploy. Holds leads_log.csv (the contacts
     # /prospects list) so it never gets wiped on a push again. Same setup the
