@@ -8,3 +8,6 @@ leads_log.csv
 
 .bin/
 .pytest_cache/
+
+data/*.sqlite3
+data/*.sqlite3-*

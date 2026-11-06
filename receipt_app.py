@@ -329,8 +329,11 @@ def make_profile_pdf(path):
 
 
 # ---------------- UI ----------------
-st.set_page_config(page_title="BMT Tools", page_icon="⛰️", layout="centered",
+st.set_page_config(page_title="BMT CRM", page_icon="⛰️", layout="centered",
                    initial_sidebar_state="collapsed")
+
+from crm_ui import require_login, render as render_crm
+require_login()
 
 # --- Sleek DARK mobile-first theme with tactile buttons (forced dark so text always reads) ---
 st.markdown("""
@@ -463,9 +466,14 @@ div[role="radiogroup"] label:hover { border-color:var(--blue); }
 """, unsafe_allow_html=True)
 
 st.markdown(
-    '<div class="bmt-hero"><h1>⛰️ Black Mountain Tools</h1>'
-    '<p>Profiles · receipts · meeting reminders — send in one tap</p></div>',
+    '<div class="bmt-hero"><h1>BMT CRM</h1>'
+    '<p>Warm leads, follow-ups and sales tools.</p></div>',
     unsafe_allow_html=True)
+
+workspace = st.radio('Workspace', ['Leads', 'Tools'], horizontal=True, label_visibility='collapsed')
+if workspace == 'Leads':
+    render_crm()
+    st.stop()
 
 mode = st.radio("What do you need?", ["Company Profile", "Meeting Reminder", "Receipt", "Profiles"],
                 horizontal=True, label_visibility="collapsed")
