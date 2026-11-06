@@ -54,6 +54,17 @@ class StoreTests(unittest.TestCase):
 class UIFlowTests(unittest.TestCase):
     setUp = StoreTests.setUp
     tearDown = StoreTests.tearDown
+    def test_owner_approved_password_free_mode(self):
+        from streamlit.testing.v1 import AppTest
+        old = os.environ.pop('BMT_CRM_PASSWORD',None)
+        try:
+            app = AppTest.from_file(str(Path(__file__).resolve().parents[1]/'receipt_app.py')).run(timeout=20)
+            self.assertFalse(app.exception)
+            self.assertEqual(len(app.metric),3)
+            self.assertFalse(any(x.label=='Shared password' for x in app.text_input))
+        finally:
+            if old is not None:os.environ['BMT_CRM_PASSWORD']=old
+
     def test_owner_and_closer_workflow(self):
         from streamlit.testing.v1 import AppTest
         old_password = os.environ.get('BMT_CRM_PASSWORD')

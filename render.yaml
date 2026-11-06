@@ -10,8 +10,6 @@ services:
     startCommand: python serve.py
     healthCheckPath: /consultation/health
     envVars:
-      - key: BMT_CRM_PASSWORD
-        sync: false
       # Set the actual values in the Render dashboard (Environment tab).
       # These let the Send button email the receipt from the company Gmail.
       - key: SMTP_USER

@@ -19,9 +19,8 @@ ZONES = {'Eastern': 'America/New_York', 'Central': 'America/Chicago',
 def require_login():
     password = os.environ.get('BMT_CRM_PASSWORD', '')
     if not password:
-        st.title('BMT CRM')
-        st.info('Private workspace setup: set BMT_CRM_PASSWORD in the Render environment.')
-        st.stop()
+        # Owner explicitly approved public CRM and Tools access on November 6, 2026.
+        return
     fingerprint = hashlib.sha256(password.encode()).hexdigest()
     if st.session_state.get('_crm_authenticated') == fingerprint:
         return
