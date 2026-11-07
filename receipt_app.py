@@ -340,7 +340,7 @@ st.markdown('<style>' + (HERE / 'crm_theme.css').read_text() + '</style>', unsaf
 with st.sidebar:
     st.markdown('<div class="brand"><div class="brand-mark">B<span>MT</span></div><div class="brand-sub">BLACK MOUNTAIN TECHNOLOGIES</div></div>', unsafe_allow_html=True)
     st.caption('WORKSPACE')
-    workspace = st.radio('Workspace', ['Leads', 'Tools'], label_visibility='collapsed')
+    workspace = st.radio('Workspace', ['Leads', 'Tools'], index=1 if st.query_params.get('view') == 'tools' else 0, label_visibility='collapsed')
     st.markdown('<div class="sidebar-note"><span class="live-dot"></span> Your sales workspace<br><small>One place. Every next step.</small></div>', unsafe_allow_html=True)
 
 if workspace == 'Leads':

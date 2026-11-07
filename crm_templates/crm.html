@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="csrf" content="{{ csrf }}"><title>BMT CRM</title>
+<link rel="stylesheet" href="/crm-assets/crm.css?v=1">
+</head><body>
+<header><a class="brand" href="/">BMT <span>CRM</span></a><div class="header-right"><label class="person">Using as <select id="person"><option>Michael</option><option>Closer</option></select></label><a class="tools" href="/tools/?view=tools">Tools ↗</a></div></header>
+<main>
+ <div class="title-row"><div><h1>Leads</h1><p id="summary">Loading your leads…</p></div><button id="add" class="primary">+ Add lead</button></div>
+ <div class="list-toolbar"><div class="tabs" role="group" aria-label="Filter leads"><button class="selected" data-view="open">Open</button><button data-view="new">New <span id="new-count"></span></button><button data-view="due">Follow-ups</button><button data-view="closed">Closed</button></div><input id="search" type="search" placeholder="Search leads" aria-label="Search leads"></div>
+ <p id="error" role="alert" hidden></p>
+ <div id="lead-list" aria-live="polite"></div>
+ <footer><span id="sync">Shared with your closer.</span><button id="refresh" class="text-button">Refresh</button></footer>
+</main>
+<dialog id="editor" aria-labelledby="editor-title">
+ <form id="lead-form">
+  <div class="dialog-heading"><h2 id="editor-title">Add lead</h2><button type="button" id="close" class="close" aria-label="Close">×</button></div>
+  <label>Company<input name="company" required maxlength="200" placeholder="Company name" autocomplete="organization"></label>
+  <div class="pair"><label>Contact<input name="contact" maxlength="200" placeholder="Their name" autocomplete="name"></label><label>Phone<input name="phone" type="tel" maxlength="80" placeholder="Phone number" autocomplete="tel"></label></div>
+  <label>Email<input name="email" type="email" maxlength="250" placeholder="Email address" autocomplete="email"></label>
+  <label>Notes<textarea name="need" maxlength="10000" rows="3" placeholder="What did you discuss? What do they need?"></textarea></label>
+  <div class="pair"><label id="status-field">Status<select name="status"><option>New</option><option>Contacted</option><option>Call booked</option><option>Follow-up</option><option>Won</option><option>Lost</option></select></label><label>Follow up on<input name="follow_up" type="date"></label></div>
+  <div id="call-fields" hidden><div class="pair"><label>Call date<input name="call_date" type="date"></label><label>Call time<input name="call_time" placeholder="10:30 AM"></label></div><label>Time zone<select name="call_zone"><option>Eastern</option><option>Central</option><option>Mountain</option><option>Pacific (US)</option><option>Arizona</option><option>Vancouver</option></select></label></div>
+  <div id="update-fields" hidden><label>Add an update<textarea name="note" rows="2" placeholder="Next step or closer’s update" maxlength="10000"></textarea></label><button id="seen" type="button" class="text-button">Mark as seen by closer</button><div id="history"></div></div>
+  <p id="form-error" role="alert" hidden></p>
+  <div class="dialog-actions"><button type="button" id="cancel">Cancel</button><button id="save" class="primary" type="submit">Save lead</button></div>
+ </form>
+</dialog>
+<script src="/crm-assets/crm.js?v=1"></script>
+</body></html>

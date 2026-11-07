@@ -17,7 +17,9 @@ def stop(*_):
 signal.signal(signal.SIGTERM, stop)
 signal.signal(signal.SIGINT, stop)
 children.append(subprocess.Popen([sys.executable, '-m', 'streamlit', 'run', 'receipt_app.py',
-    '--server.port=8501', '--server.address=127.0.0.1', '--server.headless=true']))
+    '--server.port=8501', '--server.address=127.0.0.1', '--server.headless=true', '--server.baseUrlPath=tools']))
+children.append(subprocess.Popen([sys.executable, '-m', 'gunicorn', '--bind', '127.0.0.1:8503',
+    '--workers', '1', '--threads', '4', '--timeout', '90', 'crm_web:app']))
 children.append(subprocess.Popen([sys.executable, '-m', 'gunicorn', '--bind', '127.0.0.1:8502',
     '--workers', '1', '--threads', '4', '--timeout', '90', 'booking_service.wsgi:app']))
 children.append(subprocess.Popen(['.bin/caddy', 'run', '--config', 'Caddyfile']))
