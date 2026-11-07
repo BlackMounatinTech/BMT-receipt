@@ -50,7 +50,7 @@ def payload():
     p = request.get_json(silent=True)
     if not isinstance(p, dict):
         raise ValueError('Please fill in the lead details.')
-    fields = ['company', 'contact', 'phone', 'email', 'need', 'note', 'status', 'call_time', 'call_zone']
+    fields = ['company', 'contact', 'phone', 'email', 'need', 'note', 'status', 'call_time', 'call_zone', 'zoom_url']
     for key in fields:
         if key in ('call_time', 'call_zone') and p.get(key) is None:
             continue
@@ -80,12 +80,47 @@ def update(n):
         store.update_lead(n, p['revision'], **{k: p.get(k, '') for k in ['company', 'contact', 'phone', 'email', 'need', 'status']},
                           follow_up=p.get('follow_up') or None, call_date=p.get('call_date') or None,
                           call_time=p.get('call_time') or None, call_zone=p.get('call_zone') or None,
-                          note=p.get('note', ''), author='Closer' if p.get('author') == 'Closer' else 'Michael')
+                          note=p.get('note', ''), author='Closer' if p.get('author') == 'Closer' else 'Michael', zoom_url=p.get('zoom_url'))
         return {'ok': True}
     except store.Conflict as e:
         return jsonify(error=str(e)), 409
     except (ValueError, TypeError) as e:
         return jsonify(error=str(e)), 400
+
+@app.get('/api/leads/<int:n>/appointment-email')
+def appointment_email(n):
+    from crm_appointments import preview, messages_table
+    lead = next((lead for lead in store.list_leads() if lead['id'] == n),None)
+    if not lead:
+        return jsonify(error='Lead not found.'),404
+    try:
+        with store.connect() as con:
+            messages_table(con)
+            states={row['kind']:row['state'] for row in con.execute('SELECT kind,state FROM crm_appointment_messages WHERE lead_id=? AND booking_version=?',(n,lead['booking_version']))}
+        return jsonify(**preview(lead),version=lead['booking_version'],sent_at=lead['confirmation_sent_at'],confirmed_at=lead['confirmed_at'],reminder_sent_at=lead['reminder_sent_at'],send_states=states)
+    except ValueError as e:
+        return jsonify(error=str(e)),400
+
+@app.post('/api/leads/<int:n>/appointment-email')
+def send_appointment_email(n):
+    from crm_appointments import send
+    p = request.get_json(silent=True) or {}
+    try:
+        kind='reminder' if p.get('kind') == 'reminder' else 'confirmation'
+        return send(n,p.get('version'),kind=kind,retry=p.get('retry') is True)
+    except store.Conflict as e:
+        return jsonify(error=str(e)),409
+    except ValueError as e:
+        return jsonify(error=str(e)),400
+
+@app.post('/api/leads/<int:n>/confirm-appointment')
+def confirm_appointment(n):
+    p = request.get_json(silent=True) or {}
+    with store.connect() as con:
+        result=con.execute('UPDATE crm_leads SET confirmed_at=? WHERE id=? AND booking_version=? AND status=\'Call booked\' AND confirmation_sent_at IS NOT NULL', (store.now(),n,p.get('version')))
+        if result.rowcount != 1:
+            return jsonify(error='Send the confirmation first, or refresh if the appointment changed.'),409
+    return {'ok':True}
 
 if __name__ == '__main__':
     app.run(host='127.0.0.1', port=8518)

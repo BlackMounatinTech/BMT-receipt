@@ -2,15 +2,21 @@
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="csrf" content="{{ csrf }}"><title>BMT CRM</title>
-<link rel="stylesheet" href="/crm-assets/crm.css?v=1">
+<link rel="stylesheet" href="/crm-assets/crm.css?v=2">
 </head><body>
-<header><a class="brand" href="/">BMT <span>CRM</span></a><div class="header-right"><label class="person">Using as <select id="person"><option>Michael</option><option>Closer</option></select></label><a class="tools" href="/tools/?view=tools">Tools ↗</a></div></header>
-<main>
+<header><a class="brand" href="/">BMT <span>CRM</span></a><nav class="main-nav" aria-label="Main navigation"><button id="nav-leads" class="active">Leads</button><button id="nav-calendar">Calendar</button></nav><div class="header-right"><label class="person">Using as <select id="person"><option>Michael</option><option>Closer</option></select></label><a class="tools" href="/tools/?view=tools">Tools ↗</a></div></header>
+<main id="leads-page">
  <div class="title-row"><div><h1>Leads</h1><p id="summary">Loading your leads…</p></div><button id="add" class="primary">+ Add lead</button></div>
  <div class="list-toolbar"><div class="tabs" role="group" aria-label="Filter leads"><button class="selected" data-view="open">Open</button><button data-view="new">New <span id="new-count"></span></button><button data-view="due">Follow-ups</button><button data-view="closed">Closed</button></div><input id="search" type="search" placeholder="Search leads" aria-label="Search leads"></div>
  <p id="error" role="alert" hidden></p>
  <div id="lead-list" aria-live="polite"></div>
  <footer><span id="sync">Shared with your closer.</span><button id="refresh" class="text-button">Refresh</button></footer>
+</main>
+<main id="calendar-page" hidden>
+ <div class="title-row"><div><h1>Calendar</h1><p>30-minute calls · shown in Vancouver time</p></div><button id="calendar-today">Today</button></div>
+ <div class="calendar-nav"><button id="previous-month" aria-label="Previous month">‹</button><h2 id="calendar-month"></h2><button id="next-month" aria-label="Next month">›</button></div>
+ <div class="calendar-week" aria-hidden="true"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div>
+ <div id="calendar-grid"></div><h2 id="agenda-title" class="agenda-title"></h2><div id="agenda"></div>
 </main>
 <dialog id="editor" aria-labelledby="editor-title">
  <form id="lead-form">
@@ -20,11 +26,13 @@
   <label>Email<input name="email" type="email" maxlength="250" placeholder="Email address" autocomplete="email"></label>
   <label>Notes<textarea name="need" maxlength="10000" rows="3" placeholder="What did you discuss? What do they need?"></textarea></label>
   <div class="pair"><label id="status-field">Status<select name="status"><option>New</option><option>Contacted</option><option>Call booked</option><option>Follow-up</option><option>Won</option><option>Lost</option></select></label><label>Follow up on<input name="follow_up" type="date"></label></div>
-  <div id="call-fields" hidden><div class="pair"><label>Call date<input name="call_date" type="date"></label><label>Call time<input name="call_time" placeholder="10:30 AM"></label></div><label>Time zone<select name="call_zone"><option>Eastern</option><option>Central</option><option>Mountain</option><option>Pacific (US)</option><option>Arizona</option><option>Vancouver</option></select></label></div>
+  <button type="button" id="book-appointment" class="book-button" hidden>Book appointment</button>
+  <div id="call-fields" hidden><div class="pair"><label>Call date<input name="call_date" type="date"></label><label>Call time (their time)<input name="call_time" type="time"></label></div><label>Customer’s time zone<select name="call_zone"><option>Eastern</option><option>Central</option><option>Mountain</option><option>Pacific (US)</option><option>Arizona</option><option>Vancouver</option></select></label><label>Zoom link<input name="zoom_url" type="url" placeholder="https://…" maxlength="2000"></label><p class="booking-hint">30 minutes. Save to review the confirmation email. Add the Zoom link before sending.</p><button id="show-email" type="button" class="text-button">Email &amp; confirmation</button></div>
   <div id="update-fields" hidden><label>Add an update<textarea name="note" rows="2" placeholder="Next step or closer’s update" maxlength="10000"></textarea></label><button id="seen" type="button" class="text-button">Mark as seen by closer</button><div id="history"></div></div>
   <p id="form-error" role="alert" hidden></p>
   <div class="dialog-actions"><button type="button" id="cancel">Cancel</button><button id="save" class="primary" type="submit">Save lead</button></div>
  </form>
 </dialog>
-<script src="/crm-assets/crm.js?v=1"></script>
+<dialog id="email-dialog" aria-labelledby="email-title"><div class="dialog-heading"><h2 id="email-title">Appointment email</h2><button id="close-email" class="close" aria-label="Close appointment email">×</button></div><p id="email-to"></p><strong id="email-subject"></strong><pre id="email-body"></pre><p id="email-state" role="status"></p><p class="booking-hint">A reminder with the Zoom link goes out 24 hours before the call. Calls booked inside 24 hours receive the confirmation only.</p><p id="email-error" role="alert" hidden></p><div class="dialog-actions"><button id="confirm-reply">Mark confirmed after reply</button><button id="send-email" class="primary">Send confirmation</button></div></dialog>
+<script src="/crm-assets/crm.js?v=2"></script>
 </body></html>

@@ -41,6 +41,19 @@ def connect():
             author TEXT NOT NULL, text TEXT NOT NULL, created_at TEXT NOT NULL
         );
     ''')
+    columns = {r['name'] for r in con.execute('PRAGMA table_info(crm_leads)')}
+    for name, definition in {
+        'zoom_url': "TEXT NOT NULL DEFAULT ''", 'booking_version': 'INTEGER NOT NULL DEFAULT 0',
+        'call_start_utc': 'TEXT', 'confirmation_sent_at': 'TEXT', 'confirmed_at': 'TEXT',
+        'reminder_sent_at': 'TEXT', 'booked_at': 'TEXT',
+    }.items():
+        if name not in columns:
+            try:
+                con.execute(f'ALTER TABLE crm_leads ADD COLUMN {name} {definition}')
+            except sqlite3.OperationalError:
+                if name not in {r['name'] for r in con.execute('PRAGMA table_info(crm_leads)')}:
+                    raise
+    con.commit()
     try:
         with con:
             yield con
@@ -80,7 +93,7 @@ def notes_for(lead_id):
 
 
 def update_lead(lead_id, revision, *, company, contact, phone, email, need, status,
-                follow_up=None, call_date=None, call_time=None, call_zone=None, note='', author='Closer'):
+                follow_up=None, call_date=None, call_time=None, call_zone=None, note='', author='Closer', zoom_url=None):
     if not company.strip() or (not phone.strip() and not email.strip()):
         raise ValueError('Company name and a phone number or email are required.')
     if status not in STATUSES:
@@ -88,6 +101,22 @@ def update_lead(lead_id, revision, *, company, contact, phone, email, need, stat
     if status == 'Call booked' and not call_date:
         raise ValueError('Add the date for the booked call.')
     with connect() as con:
+        con.execute('BEGIN IMMEDIATE')
+        previous = con.execute('SELECT * FROM crm_leads WHERE id=?', (lead_id,)).fetchone()
+        if not previous or previous['revision'] != revision:
+            raise Conflict('This lead changed in another session. Refresh the list before saving again.')
+        zoom_url = previous['zoom_url'] if zoom_url is None else zoom_url.strip()
+        from crm_appointments import start_time, valid_zoom
+        valid_zoom(zoom_url)
+        start = start_time(call_date, call_time, call_zone) if status == 'Call booked' and call_time else None
+        if start:
+            instant = datetime.fromisoformat(start)
+            for other in con.execute("SELECT call_start_utc FROM crm_leads WHERE id != ? AND status='Call booked' AND call_start_utc IS NOT NULL",(lead_id,)):
+                if abs((datetime.fromisoformat(other['call_start_utc'])-instant).total_seconds()) < 1800:
+                    raise ValueError('Another appointment already occupies that 30-minute slot. Choose a different time.')
+        booking_changed = any(previous[k] != v for k, v in [
+            ('call_date',call_date),('call_time',call_time),('call_zone',call_zone),('zoom_url',zoom_url),('email',email.strip())
+        ]) or ((previous['status'] == 'Call booked') != (status == 'Call booked'))
         result = con.execute('''UPDATE crm_leads SET company=?,contact=?,phone=?,email=?,need=?,status=?,
             follow_up=?,call_date=?,call_time=?,call_zone=?,updated_at=?,revision=revision+1
             WHERE id=? AND revision=?''',
@@ -95,6 +124,10 @@ def update_lead(lead_id, revision, *, company, contact, phone, email, need, stat
              follow_up,call_date,call_time,call_zone,now(),lead_id,revision))
         if result.rowcount != 1:
             raise Conflict('This lead changed in another session. Refresh the list before saving again.')
+        con.execute('UPDATE crm_leads SET zoom_url=?,call_start_utc=? WHERE id=?', (zoom_url,start,lead_id))
+        if booking_changed:
+            con.execute('''UPDATE crm_leads SET booking_version=booking_version+1,
+                confirmation_sent_at=NULL,confirmed_at=NULL,reminder_sent_at=NULL,booked_at=? WHERE id=?''', (now() if start else None,lead_id))
         if note.strip():
             con.execute('INSERT INTO crm_notes (lead_id,author,text,created_at) VALUES (?,?,?,?)',
                         (lead_id,author,note.strip(),now()))
