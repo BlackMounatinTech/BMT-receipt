@@ -329,152 +329,25 @@ def make_profile_pdf(path):
 
 
 # ---------------- UI ----------------
-st.set_page_config(page_title="BMT CRM", page_icon="⛰️", layout="centered",
-                   initial_sidebar_state="collapsed")
+st.set_page_config(page_title="BMT CRM", page_icon="⛰️", layout="wide",
+                   initial_sidebar_state="expanded")
 
 from crm_ui import require_login, render as render_crm
 require_login()
 
-# --- Sleek DARK mobile-first theme with tactile buttons (forced dark so text always reads) ---
-st.markdown("""
-<style>
-:root {
-  --blue:#3b82f6; --blue-d:#2563eb;
-  --bg:#0d1017; --bg2:#12161f; --card:#1a1f2b; --card2:#20263400;
-  --ink:#f2f5f9; --muted:#9aa4b2; --line:#2b3444;
-}
-/* force everything dark + light text */
-.stApp, body { background: var(--bg) !important; color: var(--ink) !important; }
-.block-container { padding-top: 1.1rem; padding-bottom: 4rem; max-width: 640px; }
-#MainMenu, footer, header { visibility: hidden; }
-html, body, [class*="css"] { -webkit-tap-highlight-color: transparent; }
-/* make ALL default text light so nothing is invisible */
-.stApp, .stMarkdown, .stMarkdown p, label, .stCaption, p, span, div,
-h1,h2,h3,h4,h5,h6, .stRadio label, [data-testid="stWidgetLabel"] { color: var(--ink) !important; }
-.stCaption, small, [data-testid="stCaptionContainer"] { color: var(--muted) !important; }
+# One shared visual system for the CRM and its sales tools.
+st.markdown('<style>' + (HERE / 'crm_theme.css').read_text() + '</style>', unsafe_allow_html=True)
+with st.sidebar:
+    st.markdown('<div class="brand"><div class="brand-mark">B<span>MT</span></div><div class="brand-sub">BLACK MOUNTAIN TECHNOLOGIES</div></div>', unsafe_allow_html=True)
+    st.caption('WORKSPACE')
+    workspace = st.radio('Workspace', ['Leads', 'Tools'], label_visibility='collapsed')
+    st.markdown('<div class="sidebar-note"><span class="live-dot"></span> Your sales workspace<br><small>One place. Every next step.</small></div>', unsafe_allow_html=True)
 
-/* hero header */
-.bmt-hero {
-  background: linear-gradient(135deg, #1a2234 0%, #10151f 100%);
-  color:#fff; border-radius:18px; padding:20px 22px; margin-bottom:18px;
-  border:1px solid var(--line);
-  box-shadow:0 10px 30px rgba(0,0,0,.45);
-}
-.bmt-hero h1 { font-size:1.35rem; font-weight:800; margin:0; letter-spacing:-.01em; color:#fff !important; }
-.bmt-hero p { margin:.25rem 0 0; font-size:.85rem; color:#aab3c2 !important; }
-
-/* inputs — dark fields, light text, big tap targets */
-.stTextInput input, .stNumberInput input, .stDateInput input, .stTimeInput input {
-  border-radius:12px !important; border:1.5px solid var(--line) !important;
-  padding:12px 14px !important; font-size:16px !important;
-  background:var(--card) !important; color:var(--ink) !important;
-  transition:border-color .15s ease, box-shadow .15s ease;
-}
-.stTextInput input::placeholder, .stNumberInput input::placeholder { color:#6b7688 !important; }
-.stTextInput input:focus, .stNumberInput input:focus {
-  border-color:var(--blue) !important; box-shadow:0 0 0 3px rgba(59,130,246,.22) !important;
-}
-/* selectbox / time / date FIELDS — dark bg, light text (the value shown in the closed box) */
-div[data-baseweb="select"] > div,
-div[data-baseweb="select"] > div > div,
-div[data-baseweb="input"] {
-  border-radius:12px !important; border:1.5px solid var(--line) !important;
-  background:var(--card) !important; color:var(--ink) !important; font-size:16px !important;
-}
-div[data-baseweb="select"] *, div[data-baseweb="input"] * { color:var(--ink) !important; }
-/* make time/date/select inputs fill their column — kill the wasted empty box */
-.stTimeInput div[data-baseweb="select"],
-.stDateInput div[data-baseweb="input"],
-.stSelectbox div[data-baseweb="select"],
-.stTimeInput > div, .stDateInput > div, .stSelectbox > div { width:100% !important; }
-
-/* ANY popup/dropdown/menu that overlays the page — force light text on dark.
-   Streamlit renders these in a portal at the END of the body, so target broadly. */
-div[data-baseweb="popover"] *,
-div[data-baseweb="menu"] *,
-div[data-baseweb="calendar"] *,
-ul[role="listbox"] *,
-[role="option"],
-[data-baseweb="popover"] li,
-[data-baseweb="menu"] li {
-  color:#f2f5f9 !important;
-}
-div[data-baseweb="popover"] > div,
-div[data-baseweb="menu"],
-ul[role="listbox"],
-div[data-baseweb="calendar"] {
-  background:#1a1f2b !important;
-}
-[role="option"]:hover, ul[role="listbox"] li:hover, [data-baseweb="menu"] li:hover {
-  background:#2a3345 !important;
-}
-div[data-baseweb="calendar"] [aria-selected="true"] { background:#3b82f6 !important; color:#fff !important; }
-
-/* BUTTONS — tactile / clicky, dark base, press-down on tap */
-.stButton > button, .stDownloadButton > button {
-  border-radius:13px !important; font-weight:700 !important; font-size:15px !important;
-  padding:13px 18px !important; border:1.5px solid var(--line) !important;
-  background:var(--card) !important; color:var(--ink) !important;
-  box-shadow:0 3px 0 #0a0d13, 0 6px 16px rgba(0,0,0,.4) !important;
-  transition:transform .06s ease, box-shadow .12s ease, background .15s ease !important;
-}
-.stButton > button:hover, .stDownloadButton > button:hover {
-  transform:translateY(-1px); border-color:#3a4658 !important;
-  box-shadow:0 5px 0 #0a0d13, 0 10px 22px rgba(0,0,0,.5) !important;
-}
-.stButton > button:active, .stDownloadButton > button:active {
-  transform:translateY(3px);
-  box-shadow:0 0 0 #0a0d13, inset 0 2px 8px rgba(0,0,0,.5) !important;
-}
-/* primary = blue gradient, clicky */
-.stButton > button[kind="primary"], .stButton > button[data-testid="baseButton-primary"] {
-  background:linear-gradient(180deg,var(--blue) 0%,var(--blue-d) 100%) !important;
-  color:#fff !important; border:none !important;
-  box-shadow:0 4px 0 #1e4fb8, 0 10px 24px rgba(37,99,235,.5) !important;
-}
-.stButton > button[kind="primary"]:active {
-  transform:translateY(4px);
-  box-shadow:0 0 0 #1e4fb8, inset 0 3px 10px rgba(0,0,0,.4) !important;
-}
-
-/* profile cards */
-.bmt-card {
-  background:var(--card); border:1.5px solid var(--line); border-radius:15px;
-  padding:15px 16px; margin-bottom:12px; box-shadow:0 2px 12px rgba(0,0,0,.35);
-}
-.bmt-card .nm { font-weight:800; font-size:1rem; color:var(--ink) !important; }
-.bmt-card .em { font-size:.83rem; color:var(--muted) !important; }
-.bmt-chip { display:inline-block; background:#22304d; color:#8fb4ff !important;
-  font-size:.72rem; font-weight:700; padding:3px 9px; border-radius:999px; margin-right:6px; }
-.bmt-chip.win { background:#16351f; color:#5fd98a !important; }
-.bmt-hist { font-size:.78rem; color:var(--muted) !important; margin-top:8px; line-height:1.5; }
-
-/* metrics */
-div[data-testid="stMetricValue"] { font-size:1.6rem; font-weight:800; color:var(--ink) !important; }
-div[data-testid="stMetricLabel"] { color:var(--muted) !important; }
-div[data-testid="stMetric"] { background:var(--card); border:1px solid var(--line);
-  border-radius:14px; padding:12px 14px; }
-
-/* top nav radio = pill tabs */
-div[role="radiogroup"] { gap:8px; flex-wrap:wrap; }
-div[role="radiogroup"] label {
-  background:var(--card) !important; border:1.5px solid var(--line); border-radius:11px;
-  padding:9px 14px; font-weight:700; font-size:14px; transition:all .12s ease;
-}
-div[role="radiogroup"] label:hover { border-color:var(--blue); }
-</style>
-""", unsafe_allow_html=True)
-
-st.markdown(
-    '<div class="bmt-hero"><h1>BMT CRM</h1>'
-    '<p>Warm leads, follow-ups and sales tools.</p></div>',
-    unsafe_allow_html=True)
-
-workspace = st.radio('Workspace', ['Leads', 'Tools'], horizontal=True, label_visibility='collapsed')
 if workspace == 'Leads':
     render_crm()
     st.stop()
 
+st.markdown('<div class="page-kicker">BMT / SALES TOOLS</div><h1>Ready for the next step.</h1><p class="page-intro">Profiles, reminders and receipts. Everything to move a conversation forward.</p>', unsafe_allow_html=True)
 mode = st.radio("What do you need?", ["Company Profile", "Meeting Reminder", "Receipt", "Profiles"],
                 horizontal=True, label_visibility="collapsed")
 st.write("")

@@ -1,0 +1,37 @@
+/* BMT — quiet charcoal, warm copper, generous space. */
+:root{--bg:#171918;--panel:#202320;--field:#292d28;--line:#353b34;--ink:#f1eee5;--muted:#a4ad9f;--copper:#dfb58a}
+.stApp,[data-testid="stAppViewContainer"]{background:var(--bg);color:var(--ink)}
+[data-testid="stHeader"]{background:transparent}
+.stMainBlockContainer{max-width:1180px;padding:3.5rem 3rem 5rem}
+[data-testid="stSidebar"]{background:#111512;border-right:1px solid #2d342c;min-width:245px;max-width:245px}
+[data-testid="stSidebarContent"]{padding-top:1.5rem}
+.brand{padding:4px 0 45px}.brand-mark{font-size:38px;font-weight:850;letter-spacing:-3px;color:#f1eee5}.brand-mark span{color:var(--copper)}.brand-sub{font-size:8px;letter-spacing:1.6px;color:var(--muted);margin-top:4px}
+.sidebar-note{border-top:1px solid var(--line);margin-top:70px;padding-top:20px;font-size:12px;color:var(--ink);line-height:2}.sidebar-note small{color:var(--muted)}.live-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:#a6bc8e;margin-right:6px}
+h1,h2,h3{color:var(--ink);letter-spacing:-.045em}h1{font-size:2.8rem!important;line-height:1.15!important;font-weight:650!important;padding-top:8px!important}h3{font-size:1.25rem!important}
+.page-kicker{color:var(--copper);font-size:10px;letter-spacing:2px;font-weight:650;margin-bottom:8px}.page-intro{color:var(--muted);font-size:15px;line-height:1.7;margin-bottom:24px}
+[data-testid="stCaptionContainer"]{color:var(--muted)}
+[data-testid="stMetric"]{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:15px 20px;margin:4px 0 12px}
+[data-testid="stMetricLabel"]{color:var(--muted);font-size:12px}[data-testid="stMetricValue"]{font-size:2.5rem;font-weight:500;letter-spacing:-2px;color:var(--ink)}
+[data-testid="stTextInput"] input,[data-testid="stTextArea"] textarea,[data-baseweb="select"]>div,[data-baseweb="input"]{background:var(--field)!important;color:var(--ink)!important;border-radius:8px!important}
+[data-testid="stWidgetLabel"] p{font-size:12px;color:#c0c7b9}
+input::placeholder,textarea::placeholder{color:#899381!important}
+button[kind="primary"],button[data-testid="stBaseButton-primaryFormSubmit"]{background:var(--copper)!important;color:#1c201a!important;border:1px solid var(--copper)!important;font-weight:650}
+button[kind="primary"] p{color:#1c201a!important}
+.stButton button,.stDownloadButton button,[data-testid="stPopover"] button{border-radius:8px;box-shadow:none;border-color:#46503e;min-height:42px}
+button:hover{border-color:var(--copper)!important}
+[data-testid="stVerticalBlockBorderWrapper"]{border-color:var(--line)!important;border-radius:12px!important}
+[data-testid="stExpander"]{border-color:var(--line);border-radius:9px}
+[role="radiogroup"]{gap:6px}
+[data-testid="stSidebar"] [role="radiogroup"] label{padding:10px 14px;border-radius:8px;width:100%;background:#1d241c;margin:3px 0}
+.lead-head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:12px}.lead-name{font-size:21px;color:var(--ink);font-weight:600;letter-spacing:-.5px;overflow-wrap:anywhere}.lead-contact{font-size:12px;color:var(--muted);margin-top:6px;overflow-wrap:anywhere}
+.status-tag{display:inline-block;white-space:nowrap;font-size:10px;letter-spacing:.5px;padding:5px 9px;border-radius:5px;background:#30392d;color:#c1d3ae}.status-tag.fresh{background:#46382b;color:#f0c89f}.status-tag.won{background:#293e32;color:#acd7b9}
+.lead-need{font-size:14px;line-height:1.7;color:#d0d5c8;white-space:pre-wrap;overflow-wrap:anywhere;margin:16px 0}
+.lead-next{font-size:12px;color:#dfb58a;border-top:1px solid var(--line);padding-top:12px;margin-top:12px}
+.empty-state{border:1px dashed #46503f;border-radius:12px;padding:62px 30px;text-align:center;margin:16px 0 24px;background:#1c211b}.empty-symbol{font-size:28px;color:var(--copper);margin-bottom:15px}.empty-state h3{font-size:23px!important;margin:0 0 8px}.empty-state p{font-size:14px;color:var(--muted);max-width:350px;margin:auto;line-height:1.8}
+[data-testid="stForm"]{border:0;padding:0}
+.bmt-card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px;margin-bottom:12px}.bmt-card .nm{font-weight:650}.bmt-card .em,.bmt-hist{color:var(--muted);font-size:13px}.bmt-chip{display:inline-block;background:#333e2d;padding:3px 8px;border-radius:5px;font-size:11px;margin-right:5px}
+@media(max-width:760px){.stMainBlockContainer{padding:2rem 1.1rem 4rem}h1{font-size:2rem!important}[data-testid="stMetric"]{padding:14px 12px}[data-testid="stMetricValue"]{font-size:1.9rem}.lead-name{font-size:18px}.lead-head{gap:8px}.status-tag{font-size:9px}.empty-state{padding:40px 18px}}
+
+[data-testid="stSidebar"] [role="radiogroup"] label:has(input:checked){background:#30382b;border-left:2px solid #dfb58a}
+[data-testid="stMetric"]{min-height:110px}
+[data-testid="stToolbar"]{display:none}
