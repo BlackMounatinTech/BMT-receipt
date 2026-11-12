@@ -33,6 +33,14 @@ def index():
 def health():
     return {'status': 'ok'}
 
+@app.get('/closer-hiring')
+def closer_hiring():
+    return render_template('hiring/interview.html')
+
+@app.get('/closer-questionnaire')
+def closer_questionnaire():
+    return render_template('hiring/questionnaire.html')
+
 @app.get('/api/leads')
 def leads():
     return jsonify(leads=store.list_leads())
