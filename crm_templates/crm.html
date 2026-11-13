@@ -2,12 +2,12 @@
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="csrf" content="{{ csrf }}"><title>BMT CRM</title>
-<link rel="stylesheet" href="/crm-assets/crm.css?v=2">
+<link rel="stylesheet" href="/crm-assets/crm.css?v=3">
 </head><body>
-<header><a class="brand" href="/">BMT <span>CRM</span></a><nav class="main-nav" aria-label="Main navigation"><button id="nav-leads" class="active">Leads</button><button id="nav-calendar">Calendar</button></nav><div class="header-right"><label class="person">Using as <select id="person"><option>Michael</option><option>Closer</option></select></label><a class="tools" href="/tools/?view=tools">Tools ↗</a></div></header>
+<header><a class="brand" href="/">BMT <span>CRM</span></a><nav class="main-nav" aria-label="Main navigation"><button id="nav-outreach">Outreach</button><button id="nav-leads" class="active">Active prospects</button><button id="nav-customers">Customers</button><button id="nav-calendar">Calendar</button></nav><div class="header-right"><label class="person">Using as <select id="person"><option>Michael</option><option>Closer</option></select></label><a class="tools" href="/tools/?view=tools">Tools ↗</a></div></header>
 <main id="leads-page">
- <div class="title-row"><div><h1>Leads</h1><p id="summary">Loading your leads…</p></div><button id="add" class="primary">+ Add lead</button></div>
- <div class="list-toolbar"><div class="tabs" role="group" aria-label="Filter leads"><button class="selected" data-view="open">Open</button><button data-view="new">New <span id="new-count"></span></button><button data-view="due">Follow-ups</button><button data-view="closed">Closed</button></div><input id="search" type="search" placeholder="Search leads" aria-label="Search leads"></div>
+ <div class="title-row"><div><h1 id="pipeline-title">Active prospects</h1><p id="summary">Loading your leads…</p></div><button id="add" class="primary">+ Add lead</button></div>
+ <div class="list-toolbar"><div id="lead-filters" class="tabs" role="group" aria-label="Filter leads"><button class="selected" data-view="open">Open</button><button data-view="new">New <span id="new-count"></span></button><button data-view="due">Follow-ups</button><button data-view="closed">Closed</button></div><input id="search" type="search" placeholder="Search leads" aria-label="Search leads"></div>
  <p id="error" role="alert" hidden></p>
  <div id="lead-list" aria-live="polite"></div>
  <footer><span id="sync">Shared with your closer.</span><button id="refresh" class="text-button">Refresh</button></footer>
@@ -23,6 +23,12 @@
   <div class="dialog-heading"><h2 id="editor-title">Add lead</h2><button type="button" id="close" class="close" aria-label="Close">×</button></div>
   <label>Company<input name="company" required maxlength="200" placeholder="Company name" autocomplete="organization"></label>
   <div class="pair"><label>Contact<input name="contact" maxlength="200" placeholder="Their name" autocomplete="name"></label><label>Phone<input name="phone" type="tel" maxlength="80" placeholder="Phone number" autocomplete="tel"></label></div>
+  <div class="pair"><label>Keep in<select name="stage"><option value="Outreach">Outreach</option><option value="Prospect">Active prospects</option></select></label><label>Location<input name="location" maxlength="200" placeholder="City, state"></label></div>
+  <label>Instagram profile<input name="instagram" type="url" maxlength="500" placeholder="https://www.instagram.com/company/"></label>
+  <a id="instagram-link" class="text-button profile-link" target="_blank" rel="noopener noreferrer" hidden>Open Instagram profile</a>
+  <div class="pair"><label>Contact method<select name="contact_method"><option value="">Not recorded</option><option>Instagram DM</option><option>Facebook DM</option><option>Phone</option><option>Email</option><option>Website form</option></select></label><label>Sent from<input name="contact_account" maxlength="200" placeholder="Account or phone used"></label></div>
+  <p id="contact-date" class="booking-hint" hidden></p>
+  <p class="booking-hint">Move to Active prospects when genuine interest is confirmed. Automatic replies don’t count as interest. Mark Won to move them into Customers.</p>
   <label>Email<input name="email" type="email" maxlength="250" placeholder="Email address" autocomplete="email"></label>
   <label>Notes<textarea name="need" maxlength="10000" rows="3" placeholder="What did you discuss? What do they need?"></textarea></label>
   <div class="pair"><label id="status-field">Status<select name="status"><option>New</option><option>Contacted</option><option>Call booked</option><option>Follow-up</option><option>Won</option><option>Lost</option></select></label><label>Follow up on<input name="follow_up" type="date"></label></div>
@@ -34,5 +40,5 @@
  </form>
 </dialog>
 <dialog id="email-dialog" aria-labelledby="email-title"><div class="dialog-heading"><h2 id="email-title">Appointment email</h2><button id="close-email" class="close" aria-label="Close appointment email">×</button></div><p id="email-to"></p><strong id="email-subject"></strong><pre id="email-body"></pre><p id="email-state" role="status"></p><p class="booking-hint">A reminder with the Zoom link goes out 24 hours before the call. Calls booked inside 24 hours receive the confirmation only.</p><p id="email-error" role="alert" hidden></p><div class="dialog-actions"><button id="confirm-reply">Mark confirmed after reply</button><button id="send-email" class="primary">Send confirmation</button></div></dialog>
-<script src="/crm-assets/crm.js?v=2"></script>
+<script src="/crm-assets/crm.js?v=3"></script>
 </body></html>

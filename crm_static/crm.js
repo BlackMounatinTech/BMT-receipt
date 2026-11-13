@@ -1,5 +1,6 @@
 const $ = q => document.querySelector(q);
 const form = $('#lead-form'), modal = $('#editor');
+let pipeline = ['outreach','customers','calendar'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'prospects';
 let leads = [], view = 'open', editing = null, baseline = '', busy = false;
 const el = (tag, cls, text) => { const n = document.createElement(tag); n.className = cls; if (text != null) n.textContent = text; return n; };
 const today = () => new Intl.DateTimeFormat('en-CA', {timeZone:'Etc/GMT+7', year:'numeric', month:'2-digit', day:'2-digit'}).format(new Date());
@@ -16,10 +17,13 @@ async function api(path, options = {}) {
 function render() {
   const root = $('#lead-list'); root.replaceChildren();
   const query = $('#search').value.trim().toLowerCase();
-  const shown = leads.filter(l => (view === 'open' ? !closed(l) : view === 'new' ? !closed(l) && !l.seen_at : view === 'due' ? due(l) : closed(l)) && (!query || [l.company,l.contact,l.phone,l.email,l.need].join(' ').toLowerCase().includes(query)));
-  const fresh = leads.filter(l => !closed(l) && !l.seen_at).length;
+  const pool = leads.filter(l => pipeline === 'outreach' ? l.stage === 'Outreach' && !closed(l) : pipeline === 'customers' ? l.status === 'Won' : l.stage !== 'Outreach' || closed(l));
+  const shown = pool.filter(l => (pipeline === 'customers' ? true : view === 'open' ? !closed(l) : view === 'new' ? !closed(l) && !l.seen_at : view === 'due' ? due(l) : closed(l)) && (!query || [l.company,l.contact,l.phone,l.email,l.need,l.location,l.instagram,l.contact_method,l.contact_account].join(' ').toLowerCase().includes(query)));
+  const fresh = leads.filter(l => l.stage !== 'Outreach' && !closed(l) && !l.seen_at).length;
   $('#new-count').textContent = fresh || '';
-  $('#summary').textContent = `${leads.filter(l => !closed(l)).length} open · ${leads.filter(due).length} to follow up`;
+  $('#pipeline-title').textContent = pipeline === 'outreach' ? 'Outreach' : pipeline === 'customers' ? 'Customers' : 'Active prospects';
+  $('#lead-filters').hidden = pipeline !== 'prospects';
+  $('#summary').textContent = pipeline === 'outreach' ? `${pool.length} contacted · interest not yet confirmed` : pipeline === 'customers' ? `${pool.length} customers` : `${pool.filter(l=>!closed(l)).length} active · ${pool.filter(due).length} to follow up`;
   if (!shown.length) {
     const box = el('div', 'empty');
     box.append(el('h2','',!leads.length ? 'Add your first lead.' : 'Nothing here right now.'),el('p','',!leads.length ? 'Put in their details and a few notes. Your closer can take it from there.' : 'Try another filter or search.'));
@@ -28,9 +32,11 @@ function render() {
   for (const lead of shown) {
     const row = el('button','lead-row'); row.type = 'button';
     const left = el('div','lead-main'), name = el('div','company');
-    if (!lead.seen_at && !closed(lead)) name.append(el('span','new-dot'));
+    if (lead.stage !== 'Outreach' && !lead.seen_at && !closed(lead)) name.append(el('span','new-dot'));
     name.append(document.createTextNode(lead.company));
-    left.append(name,el('div','sub',[lead.contact,lead.phone || lead.email].filter(Boolean).join(' · ') || 'Open to view details'));
+    const contact = lead.phone || lead.email || (lead.instagram ? '@'+lead.instagram.split('/').filter(Boolean).at(-1) : '');
+    left.append(name,el('div','sub',[lead.location,lead.contact,contact].filter(Boolean).join(' · ') || 'Open to view details'));
+    if (lead.contact_method) left.append(el('div','contact-trail',[lead.contact_method,lead.contact_account ? 'from '+(['Instagram DM','Facebook DM'].includes(lead.contact_method)?'@':'')+lead.contact_account.replace(/^@/,'') : '',lead.last_contacted_at ? new Intl.DateTimeFormat('en-US',{timeZone:'Etc/GMT+7',month:'short',day:'numeric'}).format(new Date(lead.last_contacted_at)) : ''].filter(Boolean).join(' · ')));
     const right = el('div','lead-right');
     if (due(lead)) right.append(el('span','due',lead.follow_up === today() ? 'Follow up today' : 'Follow-up overdue'));
     right.append(el('span','badge' + (lead.status === 'Call booked' ? ' booked' : lead.status === 'Won' ? ' won' : ''),lead.status),el('span','chevron','›'));
@@ -38,7 +44,7 @@ function render() {
   }
 }
 async function load() {
-  try { leads = (await api('/api/leads')).leads; render(); renderCalendar(); $('#error').hidden = true; $('#sync').textContent = 'Shared with your closer.'; }
+  try { leads = (await api('/api/leads')).leads; render(); renderCalendar(); $('#error').hidden = true; $('#sync').textContent = 'Saved on your shared CRM.'; }
   catch(e) { $('#error').textContent = e.message; $('#error').hidden = false; }
 }
 function callFields() {
@@ -53,9 +59,13 @@ async function openLead(lead = null) {
   editing = lead; form.reset(); $('#form-error').hidden = true; $('#history').replaceChildren();
   $('#editor-title').textContent = lead ? lead.company : 'Add lead';
   $('#status-field').hidden = !lead; $('#update-fields').hidden = !lead;
-  for (const name of ['company','contact','phone','email','need','follow_up','status','call_date','call_time','call_zone','zoom_url']) field(name).value = lead?.[name] || (name === 'status' ? 'New' : name === 'call_zone' ? 'Eastern' : '');
+  for (const name of ['company','contact','phone','email','need','follow_up','status','call_date','call_time','call_zone','zoom_url','instagram','location','stage','contact_method','contact_account']) field(name).value = lead?.[name] || (name === 'stage' ? (pipeline === 'outreach' ? 'Outreach' : 'Prospect') : name === 'status' ? 'New' : name === 'call_zone' ? 'Eastern' : '');
+  $('#instagram-link').hidden = !lead?.instagram;
+  if (lead?.instagram) $('#instagram-link').href = lead.instagram;
+  $('#contact-date').hidden = !lead?.last_contacted_at;
+  $('#contact-date').textContent = lead?.last_contacted_at ? 'Last contacted: '+new Intl.DateTimeFormat('en-US',{timeZone:'Etc/GMT+7',dateStyle:'medium',timeStyle:'short'}).format(new Date(lead.last_contacted_at))+' Vancouver time' : '';
   if (lead?.call_time) { const match = lead.call_time.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i); if (match) field('call_time').value = String(match[3] ? (+match[1] % 12) + (match[3].toUpperCase() === 'PM' ? 12 : 0) : +match[1]).padStart(2,'0') + ':' + match[2]; }
-  $('#seen').hidden = !lead || !!lead.seen_at || $('#person').value !== 'Closer';
+  $('#seen').hidden = !lead || lead.stage === 'Outreach' || !!lead.seen_at || $('#person').value !== 'Closer';
   $('#seen').disabled = false; $('#seen').textContent = 'Mark as seen by closer';
   callFields(); baseline = snapshot(); modal.showModal(); field('company').focus();
   if (lead) {
@@ -63,7 +73,7 @@ async function openLead(lead = null) {
       const data = await api(`/api/leads/${lead.id}/notes`);
       if (editing?.id !== lead.id) return;
       for (const note of data.notes) {
-        const p = el('p',''); p.append(el('small','',`${note.author} · ${new Date(note.created_at).toLocaleDateString()}`),document.createTextNode(note.text)); $('#history').append(p);
+        const p = el('p',''); p.append(el('small','',`${note.author} · ${new Date(note.created_at).toLocaleDateString('en-US',{timeZone:'Etc/GMT+7'})}`),document.createTextNode(note.text)); $('#history').append(p);
       }
     } catch(e) { $('#form-error').textContent = 'Could not load earlier updates. ' + e.message; $('#form-error').hidden = false; }
   }
@@ -92,7 +102,7 @@ $('#seen').onclick = async () => {
 form.onsubmit = async event => {
   event.preventDefault(); if (busy) return;
   const data = Object.fromEntries(new FormData(form));
-  if (!data.phone.trim() && !data.email.trim()) { $('#form-error').textContent = 'Add a phone number or email.'; $('#form-error').hidden = false; return; }
+  if (!data.phone.trim() && !data.email.trim() && !data.instagram.trim()) { $('#form-error').textContent = 'Add a phone number, email or Instagram profile.'; $('#form-error').hidden = false; return; }
   busy = true; $('#save').disabled = true; $('#save').textContent = 'Saving…';
   try {
     if (editing) { data.revision = editing.revision; data.author = $('#person').value; }
@@ -178,12 +188,16 @@ function renderCalendar() {
     row.append(info,el('span','badge',lead.confirmed_at?'Confirmed':lead.confirmation_sent_at?'Awaiting reply':'Email not sent'));row.onclick=()=>openLead(lead);agenda.append(row);
   }
 }
-function showPage(calendar) {
-  $('#leads-page').hidden=calendar;$('#calendar-page').hidden=!calendar;
-  $('#nav-leads').classList.toggle('active',!calendar);$('#nav-calendar').classList.toggle('active',calendar);
-  if(calendar)renderCalendar();
+function showPage(page) {
+  pipeline=page; view='open';
+  $('#leads-page').hidden=page==='calendar';$('#calendar-page').hidden=page!=='calendar';
+  for (const [id,name] of [['nav-outreach','outreach'],['nav-leads','prospects'],['nav-customers','customers'],['nav-calendar','calendar']]) $('#'+id).classList.toggle('active',page===name);
+  document.querySelectorAll('[data-view]').forEach(b=>b.classList.toggle('selected',b.dataset.view==='open'));
+  if(page==='calendar')renderCalendar();else render();
 }
-$('#nav-leads').onclick=()=>showPage(false);$('#nav-calendar').onclick=()=>showPage(true);
+for (const [id,page] of [['nav-outreach','outreach'],['nav-leads','prospects'],['nav-customers','customers'],['nav-calendar','calendar']]) $('#'+id).onclick=()=>{location.hash=page;showPage(page)};
+window.addEventListener('hashchange',()=>showPage(['outreach','customers','calendar'].includes(location.hash.slice(1))?location.hash.slice(1):'prospects'));
+showPage(pipeline);
 $('#calendar-today').onclick=()=>{calendarDay=today();calendarMonth=calendarDay.slice(0,7);renderCalendar()};
 for(const [id,delta] of [['previous-month',-1],['next-month',1]])$('#'+id).onclick=()=>{const d=dayDate(calendarMonth+'-01');d.setUTCMonth(d.getUTCMonth()+delta);calendarMonth=d.toISOString().slice(0,7);renderCalendar()};
 load();

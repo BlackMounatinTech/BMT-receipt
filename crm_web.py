@@ -58,7 +58,8 @@ def payload():
     p = request.get_json(silent=True)
     if not isinstance(p, dict):
         raise ValueError('Please fill in the lead details.')
-    fields = ['company', 'contact', 'phone', 'email', 'need', 'note', 'status', 'call_time', 'call_zone', 'zoom_url']
+    fields = ['company', 'contact', 'phone', 'email', 'need', 'note', 'status', 'call_time', 'call_zone', 'zoom_url',
+              'instagram', 'location', 'stage', 'contact_method', 'contact_account']
     for key in fields:
         if key in ('call_time', 'call_zone') and p.get(key) is None:
             continue
@@ -74,10 +75,22 @@ def add():
     try:
         p = payload()
         n = store.add_lead(p.get('company', ''), p.get('contact', ''), p.get('phone', ''),
-                           p.get('email', ''), p.get('need', ''), p.get('follow_up') or None)
+                           p.get('email', ''), p.get('need', ''), p.get('follow_up') or None,
+                           **{k:p.get(k,'Prospect' if k=='stage' else '') for k in
+                              ['instagram','location','stage','contact_method','contact_account']})
         return jsonify(id=n), 201
     except (ValueError, TypeError):
-        return jsonify(error='Add a company and at least a phone number or email. Check any dates.'), 400
+        return jsonify(error='Add a company and a phone number, email or valid Instagram profile. Check any dates.'), 400
+
+@app.post('/api/outreach/import-instagram')
+def import_instagram():
+    try:
+        data = request.get_json(silent=True) or {}
+        if not isinstance(data, dict):
+            raise ValueError('Provide confirmed contact records.')
+        return jsonify(store.import_instagram_contacts(data.get('records')))
+    except (ValueError, TypeError) as e:
+        return jsonify(error=str(e)), 400
 
 @app.patch('/api/leads/<int:n>')
 def update(n):
@@ -88,7 +101,8 @@ def update(n):
         store.update_lead(n, p['revision'], **{k: p.get(k, '') for k in ['company', 'contact', 'phone', 'email', 'need', 'status']},
                           follow_up=p.get('follow_up') or None, call_date=p.get('call_date') or None,
                           call_time=p.get('call_time') or None, call_zone=p.get('call_zone') or None,
-                          note=p.get('note', ''), author='Closer' if p.get('author') == 'Closer' else 'Michael', zoom_url=p.get('zoom_url'))
+                          note=p.get('note', ''), author='Closer' if p.get('author') == 'Closer' else 'Michael', zoom_url=p.get('zoom_url'),
+                          **{k:p.get(k) for k in ['instagram','location','stage','contact_method','contact_account']})
         return {'ok': True}
     except store.Conflict as e:
         return jsonify(error=str(e)), 409
