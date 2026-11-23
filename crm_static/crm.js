@@ -46,7 +46,7 @@ function render() {
   }
 }
 async function load() {
-  try { leads = (await api('/api/leads')).leads; render(); renderCalendar(); $('#error').hidden = true; $('#sync').textContent = 'Saved on your shared CRM.'; }
+  try { leads = (await api('/api/leads')).leads; render(); renderCalendar(); document.dispatchEvent(new Event('crm-leads-updated')); $('#error').hidden = true; $('#sync').textContent = 'Saved on your shared CRM.'; }
   catch(e) { $('#error').textContent = e.message; $('#error').hidden = false; }
 }
 function callFields() {

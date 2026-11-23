@@ -36,6 +36,16 @@ class CallingTests(unittest.TestCase):
 
     def tearDown(self): self.env.stop();self.tmp.cleanup()
 
+    def test_pipeline_counters_count_wins_and_preserve_booked_wins(self):
+        self.assertEqual(calling.pipeline_counts(), dict(booked=0, closes=0))
+        with store.connect() as con:
+            for name,status,stamp in [('Booked','Call booked','2030-01-01'),('Converted','Won','2030-01-01'),('Direct win','Won',None),('Lost test','Lost','2030-01-01'),('Pending','New',None)]:
+                con.execute('INSERT INTO crm_leads(company,status,booked_at,created_at,updated_at) VALUES(?,?,?,?,?)',(name,status,stamp,store.now(),store.now()))
+        self.assertEqual(calling.pipeline_counts(), dict(booked=2, closes=2))
+        self.assertEqual(self.client.get('/api/calling/counts').json['booked'],2)
+        counts=self.client.post('/api/calling/new-day',headers=self.headers).json
+        self.assertEqual((counts['booked'],counts['closes']),(2,2))
+
     def upload(self,raw,commit='false'):
         return self.client.post('/api/calling/import',data={'name':'Test list','file':(io.BytesIO(raw.encode()),'leads.csv'),'commit':commit},headers=self.headers)
 

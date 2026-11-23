@@ -48,6 +48,8 @@
   function showCounts(counts) {
     $('#calls-today').textContent=counts.today.toLocaleString();
     $('#calls-total').textContent=counts.total.toLocaleString();
+    $('#meetings-booked').textContent=counts.booked.toLocaleString();
+    $('#deals-closed').textContent=counts.closes.toLocaleString();
     $('#counter-error').hidden=true;
   }
   async function refreshCounts() {
@@ -267,6 +269,7 @@
     if(draft)fetch(`/api/calling/leads/${lead.id}/notes`,{method:'POST',keepalive:true,headers:{'Content-Type':'application/json','X-CSRF-Token':$('meta[name=csrf]').content},body:JSON.stringify({text:draft.text,version:draft.version})}).catch(()=>{});
     if(callBusy||draft){e.preventDefault();e.returnValue='';}
   });
+  document.addEventListener('crm-leads-updated',refreshCounts);
   refreshCounts();
   setInterval(()=>{if(!document.hidden)refreshCounts();},30000);
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshCounts();});

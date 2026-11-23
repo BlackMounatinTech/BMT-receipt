@@ -57,6 +57,16 @@ def call_counts(reset=False, instant=None):
     return dict(total=total,today=daily,day=day)
 
 
+def pipeline_counts():
+    """Count booked companies (including wins) and successful closes, excluding losses."""
+    with store.connect() as con:
+        row = con.execute("""SELECT
+            SUM(CASE WHEN status='Call booked' OR (status='Won' AND booked_at IS NOT NULL) THEN 1 ELSE 0 END) AS booked,
+            SUM(CASE WHEN status='Won' THEN 1 ELSE 0 END) AS closes
+            FROM crm_leads""").fetchone()
+    return dict(booked=row['booked'] or 0, closes=row['closes'] or 0)
+
+
 def phone_key(value):
     digits = re.sub(r'\D', '', value)
     return digits[1:] if len(digits) == 11 and digits.startswith('1') else digits
