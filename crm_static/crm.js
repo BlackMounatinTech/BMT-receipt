@@ -17,14 +17,14 @@ async function api(path, options = {}) {
 function render() {
   const root = $('#lead-list'); root.replaceChildren();
   const query = $('#search').value.trim().toLowerCase();
-  const pool = leads.filter(l => pipeline === 'followups' ? !!l.follow_up && !closed(l) && l.status !== 'Call booked' : pipeline === 'outreach' ? l.stage === 'Outreach' && !closed(l) : pipeline === 'customers' ? l.status === 'Won' : l.stage === 'Prospect' || closed(l));
-  if(pipeline==='followups')pool.sort((a,b)=>a.follow_up.localeCompare(b.follow_up)||a.company.localeCompare(b.company));
-  const shown = pool.filter(l => (pipeline === 'customers' ? true : view === 'open' ? !closed(l) : view === 'new' ? !closed(l) && !l.seen_at : view === 'due' ? due(l) : closed(l)) && (!query || [l.company,l.contact,l.phone,l.email,l.need,l.location,l.instagram,l.contact_method,l.contact_account].join(' ').toLowerCase().includes(query)));
+  const pool = leads.filter(l => pipeline === 'followups' ? (!!l.follow_up || l.status==='Follow-up') && !closed(l) && l.status !== 'Call booked' : pipeline === 'outreach' ? l.stage === 'Outreach' && !closed(l) : pipeline === 'customers' ? l.status === 'Won' : l.stage === 'Prospect' || closed(l));
+  if(pipeline==='followups')pool.sort((a,b)=>(a.follow_up||'9999-12-31').localeCompare(b.follow_up||'9999-12-31')||a.company.localeCompare(b.company));
+  const shown = pool.filter(l => (['customers','followups'].includes(pipeline) ? true : view === 'open' ? !closed(l) : view === 'new' ? !closed(l) && !l.seen_at : view === 'due' ? due(l) : closed(l)) && (!query || [l.company,l.contact,l.phone,l.email,l.need,l.location,l.instagram,l.contact_method,l.contact_account].join(' ').toLowerCase().includes(query)));
   const fresh = leads.filter(l => l.stage !== 'Outreach' && !closed(l) && !l.seen_at).length;
   $('#new-count').textContent = fresh || '';
   $('#pipeline-title').textContent = pipeline === 'followups' ? 'Follow-ups' : pipeline === 'outreach' ? 'Outreach' : pipeline === 'customers' ? 'Customers' : 'Active prospects';
   $('#lead-filters').hidden = pipeline !== 'prospects';
-  $('#summary').textContent = pipeline === 'followups' ? `${pool.length} scheduled · ${pool.filter(due).length} due or overdue · includes future dates` : pipeline === 'outreach' ? `${pool.length} contacted · interest not yet confirmed` : pipeline === 'customers' ? `${pool.length} customers` : `${pool.filter(l=>!closed(l)).length} active · ${pool.filter(due).length} to follow up`;
+  $('#summary').textContent = pipeline === 'followups' ? `${pool.filter(l=>l.follow_up).length} scheduled · ${pool.filter(l=>!l.follow_up).length} without a date · ${pool.filter(due).length} due or overdue` : pipeline === 'outreach' ? `${pool.length} contacted · interest not yet confirmed` : pipeline === 'customers' ? `${pool.length} customers` : `${pool.filter(l=>!closed(l)).length} active · ${pool.filter(due).length} to follow up`;
   if (!shown.length) {
     const box = el('div', 'empty');
     box.append(el('h2','',!leads.length ? 'Add your first lead.' : 'Nothing here right now.'),el('p','',!leads.length ? 'Put in their details and a few notes. Your closer can take it from there.' : 'Try another filter or search.'));
@@ -40,7 +40,7 @@ function render() {
     if (lead.contact_method) left.append(el('div','contact-trail',[lead.contact_method,lead.contact_account ? 'from '+(['Instagram DM','Facebook DM'].includes(lead.contact_method)?'@':'')+lead.contact_account.replace(/^@/,'') : '',lead.last_contacted_at ? new Intl.DateTimeFormat('en-US',{timeZone:'Etc/GMT+7',month:'short',day:'numeric'}).format(new Date(lead.last_contacted_at)) : ''].filter(Boolean).join(' · ')));
     const right = el('div','lead-right');
     if (due(lead)) right.append(el('span','due',lead.follow_up === today() ? 'Follow up today' : 'Follow-up overdue'));
-    if (pipeline==='followups')right.append(el('span','followup-date',new Date(lead.follow_up+'T12:00:00Z').toLocaleDateString('en-US',{timeZone:'UTC',month:'short',day:'numeric',year:'numeric'})));
+    if (pipeline==='followups')right.append(el('span','followup-date',lead.follow_up?new Date(lead.follow_up+'T12:00:00Z').toLocaleDateString('en-US',{timeZone:'UTC',month:'short',day:'numeric',year:'numeric'}):'No date set'));
     right.append(el('span','badge' + (lead.status === 'Call booked' ? ' booked' : lead.status === 'Won' ? ' won' : ''),lead.status),el('span','chevron','›'));
     row.append(left,right); row.onclick = () => openLead(lead); root.append(row);
   }

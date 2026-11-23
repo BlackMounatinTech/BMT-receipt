@@ -249,6 +249,21 @@ class CallingTests(unittest.TestCase):
         self.assertEqual(calling.items(result['list_id'])[0]['call_notes'],'Owner wants a call Friday.')
         self.assertEqual(self.client.post(path,json={'text':'No CSRF','version':1}).status_code,403)
 
+    def test_undated_followup_requires_note_and_preserves_history(self):
+        result=self.upload('Company,Phone\nFirst,2125550100\n','true').json
+        lead=calling.items(result['list_id'])[0]
+        path=f"/api/calling/lists/{result['list_id']}/{lead['id']}/outcome"
+        payload=dict(revision=lead['revision'],outcome='Follow up',follow_up='',note='')
+        self.assertEqual(self.client.post(path,json=payload,headers=self.headers).status_code,400)
+        payload['note']='Disconnected. Try again tomorrow.'
+        self.assertEqual(self.client.post(path,json=payload,headers=self.headers).status_code,200)
+        saved=calling.items(result['list_id'])[0]
+        self.assertEqual(saved['status'],'Follow-up');self.assertIsNone(saved['follow_up'])
+        self.assertIn('Try again tomorrow.',saved['call_notes'])
+        self.assertEqual(calling.call_counts()['total'],1)
+        self.assertEqual(self.client.post(path,json=payload,headers=self.headers).status_code,409)
+        self.assertEqual(self.client.get('/api/booking/jobs').json['jobs'],[])
+
     def test_follow_up_preserves_notes_and_future_date_without_booking(self):
         result=self.upload('Company,Phone\nFirst,2125550100\n','true').json
         lead=calling.items(result['list_id'])[0]

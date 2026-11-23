@@ -15,7 +15,7 @@
   <p id="call-research" class="call-research"></p><button id="call-details" class="text-button">View lead &amp; history</button>
   <label>Call notes<textarea id="call-note" rows="3" maxlength="10000" placeholder="What did they say? What should the closer know?"></textarea></label><div class="note-save-row"><span id="call-note-state" role="status">Saved</span><button id="restore-call-notes" class="text-button" hidden>Restore server notes</button></div>
   <p id="call-followup-date" class="booking-hint"></p>
-  <div id="followup-date-label" class="followup-save" hidden><label>Follow up on<input id="call-followup" type="date"></label><button id="save-call-followup" class="primary">Save follow-up &amp; next →</button><p class="booking-hint">Saved follow-ups appear in the Follow-ups tab, including future dates. This does not create a Zoom meeting or send an email.</p></div>
+  <div id="followup-date-label" class="followup-save" hidden><label>Follow-up date (optional)<input id="call-followup" type="date"></label><button id="clear-call-followup" type="button">No date</button><button id="save-call-followup" class="primary">Save follow-up &amp; next →</button><p class="booking-hint">Choose a date, or leave it blank and add a call note above. Both appear in Follow-ups; no meeting or email is created.</p></div>
   <p id="call-job-state" role="status"></p><button id="resume-booking" hidden>Resume booking</button>
   <div class="call-outcomes"><button data-outcome="No answer">No answer →</button><button data-outcome="Not interested">Not interested →</button><button id="call-followup-button">Follow up</button><button id="call-book" class="primary">Book meeting</button></div>
  </section>
@@ -73,7 +73,7 @@
  </form>
 </dialog>
 <dialog id="email-dialog" aria-labelledby="email-title"><div class="dialog-heading"><h2 id="email-title">Appointment email</h2><button id="close-email" class="close" aria-label="Close appointment email">×</button></div><p id="email-to"></p><label>Customer email<input id="booking-correct-email" type="email" maxlength="250" autocomplete="email"></label><button id="correct-booking-email" type="button">Save email &amp; resend booking</button><p class="booking-hint">Updates the calendar invitation and resends the confirmation using the same time and Zoom link.</p><strong id="email-subject"></strong><pre id="email-body"></pre><p id="email-state" role="status"></p><p class="booking-hint">A reminder with the Zoom link goes out 24 hours before the call. Calls booked inside 24 hours receive the confirmation only.</p><p id="email-error" role="alert" hidden></p><div class="dialog-actions"><button id="confirm-reply">Mark confirmed after reply</button><button id="send-email" class="primary">Send confirmation</button></div></dialog>
-<script src="/crm-assets/crm.js?v=7"></script>
+<script src="/crm-assets/crm.js?v=8"></script>
 <script src="/crm-assets/lead_time.js?v=1"></script>
-<script src="/crm-assets/calling.js?v=6"></script>
+<script src="/crm-assets/calling.js?v=7"></script>
 </body></html>

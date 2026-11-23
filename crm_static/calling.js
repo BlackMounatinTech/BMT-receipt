@@ -124,7 +124,7 @@
     if(draft){clearTimeout(noteTimer);noteTimer=setTimeout(()=>flushNotes().catch(e=>error('call-error',e.message)),500);}
     $('#followup-date-label').hidden = true;
     $('#call-followup').value=lead.follow_up||'';
-    $('#call-followup-date').textContent=lead.follow_up?'Follow up on '+lead.follow_up:'';
+    $('#call-followup-date').textContent=lead.follow_up?'Follow up on '+lead.follow_up:lead.status==='Follow-up'?'Follow-up · No date set':'';
     const job = jobFor(lead), locked = !!job || ['Won','Lost','Call booked'].includes(lead.status);
     document.querySelectorAll('[data-outcome],#call-followup-button,#call-book').forEach(b=>b.disabled=locked);
     $('#call-job-state').textContent = job ? job.state==='complete' ? 'Meeting booked · confirmation sent.' : job.error || 'Booking in progress. Open it to review the next step.' : '';
@@ -159,8 +159,9 @@
   $('#call-followup-button').onclick=()=>{
     $('#followup-date-label').hidden=false;$('#call-followup').focus();
   };
+  $('#clear-call-followup').onclick=()=>{$('#call-followup').value='';$('#call-note').focus();};
   $('#save-call-followup').onclick=()=>{
-    if(!$('#call-followup').value){error('call-error','Choose a follow-up date.');return;}
+    if(!$('#call-followup').value&&!$('#call-note').value.trim()){error('call-error','Add a note for an undated follow-up, or choose a date.');$('#call-note').focus();return;}
     record('Follow up');
   };
   $('#nav-calling').onclick=()=>{if(location.hash==='#calling')route();else location.hash='calling';};

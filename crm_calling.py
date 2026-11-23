@@ -232,10 +232,12 @@ def outcome(list_id, lead_id, revision, result, note='', follow_up=None):
         raise ValueError('Choose a call outcome.')
     if not isinstance(note,str) or len(note)>10000:
         raise ValueError('Check the call notes.')
+    follow_up = follow_up or None
     if result == 'Follow up':
-        if not follow_up:
-            raise ValueError('Choose a follow-up date.')
-        date.fromisoformat(follow_up)
+        if follow_up:
+            date.fromisoformat(follow_up)
+        elif not note.strip():
+            raise ValueError('Add a note for an undated follow-up, or choose a date.')
     with store.connect() as con:
         schema(con)
         con.execute('BEGIN IMMEDIATE')

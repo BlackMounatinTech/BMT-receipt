@@ -120,3 +120,9 @@ the confirmation. Time, Zoom meeting, host and unrelated guests stay intact.
 Corrections preserve a durable pending state; retry the same address to finish a
 failed Calendar/email step. An interrupted SMTP claim is held for Sent mail review.
 Calendar attendee updates follow the provider API: https://developers.google.com/workspace/calendar/api/v3/reference/events/patch
+
+## Optional follow-up dates
+
+Calling follow-ups accept either a selected date or a note with no date. No date
+clears any previously selected date. The Follow-ups tab includes both, sorts dated
+items first, and labels undated items No date set. Undated items are not overdue.
