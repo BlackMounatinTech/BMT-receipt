@@ -73,3 +73,18 @@ The existing password-free access policy remains unchanged.
 
 Provider calls in calling tests are mocked. No live Zoom meetings, Google invitations
 or customer emails are created by tests.
+
+## Production verification — November 23, 2026
+
+Connected the internal Zoom app BMT CRM Booking with only
+`meeting:write:meeting:admin`, and the internal Google OAuth client BMT CRM Booking
+with Calendar event and free/busy access. All six provider credentials are in the
+existing Render service's private environment. The sender is
+michael@blackmountaintechnologies.ca. No credentials are stored in this repository.
+
+One explicitly labelled internal test booked a 30-minute Zoom meeting, wrote its
+Google Calendar invitation, and sent the BMT confirmation to Michael's own Gmail.
+Both emails were observed in the recipient inbox. The test calendar event was then
+canceled, the Zoom meeting deleted (recoverable for seven days), and the test CRM
+record closed with a verification note. The test did not increase cold-call counts.
+Live connection readiness verified true for Zoom, Google Calendar and email.

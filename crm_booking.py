@@ -168,8 +168,10 @@ def create(lead_id, data):
             raise ValueError('This lead is already booked or closed. Open the lead to review it.')
         if con.execute("SELECT 1 FROM crm_booking_jobs WHERE lead_id=? AND state NOT IN ('complete','abandoned')",(lead_id,)).fetchone():
             raise ValueError('This lead already has a booking in progress. Resume it instead.')
-        for row in con.execute('SELECT payload,state FROM crm_booking_jobs'):
+        for row in con.execute('SELECT payload,state,lead_id FROM crm_booking_jobs'):
             if row['state']=='abandoned': continue
+            if row['state']=='complete' and con.execute('SELECT status FROM crm_leads WHERE id=?',(row['lead_id'],)).fetchone()[0]!='Call booked':
+                continue
             other = json.loads(row['payload'])
             if other['host']['id']==host['id'] and abs((datetime.fromisoformat(other['start'])-instant).total_seconds())<1800:
                 raise ValueError('That closer already has a CRM booking in this slot.')

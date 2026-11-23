@@ -90,6 +90,13 @@ class CallingTests(unittest.TestCase):
         self.assertEqual(job['state'],'complete')
         self.assertEqual(calling.items(result['list_id'])[0]['outcome'],'Booked')
         self.assertEqual(calling.call_counts()['total'],1)
+        # Closing a completed call must release its CRM-only slot reservation.
+        with store.connect() as con:
+            con.execute("UPDATE crm_leads SET status='Lost' WHERE id=?",(lead['id'],))
+        next_id=store.add_lead('Another company','Pat','2125550101')
+        data.update(revision=0,list_id=None)
+        with patch.object(booking,'connection_status',return_value={'ready':True}),patch.object(booking,'hosts',return_value=[host]),patch.object(booking,'Providers',return_value=provider),patch('tools.email_sender.send_email',return_value={'ok':True}):
+            self.assertEqual(booking.create(next_id,data)['state'],'complete')
 
     def test_uncertain_zoom_and_concurrent_claim_block_retry(self):
         n=store.add_lead('Test','Pat','2125550100')
