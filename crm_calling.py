@@ -3,7 +3,7 @@ import csv
 import io
 import re
 import uuid
-from datetime import date
+from datetime import date, datetime, timezone, timedelta
 import crm_store as store
 
 
@@ -17,6 +17,41 @@ def schema(con):
         lead_id INTEGER NOT NULL REFERENCES crm_leads(id), position INTEGER NOT NULL,
         outcome TEXT, called_at TEXT, PRIMARY KEY(list_id,lead_id))
     ''')
+    con.execute('''CREATE TABLE IF NOT EXISTS crm_call_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, event_key TEXT NOT NULL UNIQUE,
+        lead_id INTEGER NOT NULL REFERENCES crm_leads(id),
+        outcome TEXT NOT NULL, created_at TEXT NOT NULL)''')
+    con.execute('''CREATE TABLE IF NOT EXISTS crm_call_day_reset (
+        day TEXT PRIMARY KEY, after_event_id INTEGER NOT NULL, reset_at TEXT NOT NULL)''')
+
+
+def record_event(con, key, lead_id, result, stamp):
+    con.execute('INSERT OR IGNORE INTO crm_call_events(event_key,lead_id,outcome,created_at) VALUES(?,?,?,?)',
+                (key,lead_id,result,stamp))
+
+
+def call_counts(reset=False, instant=None):
+    instant = instant or datetime.now(timezone.utc)
+    local = instant.astimezone(timezone(timedelta(hours=-7)))
+    day = local.date().isoformat()
+    start = local.replace(hour=0,minute=0,second=0,microsecond=0).astimezone(timezone.utc).isoformat(timespec='seconds')
+    end = (local.replace(hour=0,minute=0,second=0,microsecond=0)+timedelta(days=1)).astimezone(timezone.utc).isoformat(timespec='seconds')
+    with store.connect() as con:
+        schema(con)
+        con.execute('BEGIN IMMEDIATE')
+        # Recover calls already recorded by the first release, without counting DMs.
+        for note in con.execute("SELECT id,lead_id,text,created_at FROM crm_notes WHERE text LIKE 'Phone: %'"):
+            result=note['text'].split('\n',1)[0][7:]
+            if result in ('Called','No answer','Not interested','Follow up'):
+                record_event(con,'note:'+str(note['id']),note['lead_id'],result,note['created_at'])
+        if reset:
+            maximum=con.execute('SELECT COALESCE(MAX(id),0) FROM crm_call_events').fetchone()[0]
+            con.execute('INSERT OR REPLACE INTO crm_call_day_reset VALUES(?,?,?)',(day,maximum,store.now()))
+        marker=con.execute('SELECT after_event_id FROM crm_call_day_reset WHERE day=?',(day,)).fetchone()
+        total=con.execute('SELECT COUNT(*) FROM crm_call_events').fetchone()[0]
+        daily=con.execute('SELECT COUNT(*) FROM crm_call_events WHERE created_at>=? AND created_at<? AND id>?',
+                          (start,end,marker[0] if marker else 0)).fetchone()[0]
+    return dict(total=total,today=daily,day=day)
 
 
 def phone_key(value):
@@ -184,6 +219,7 @@ def outcome(list_id, lead_id, revision, result, note='', follow_up=None):
             (status,follow_up if result=='Follow up' else None,stamp,stamp,lead_id))
         con.execute('UPDATE crm_call_items SET outcome=?,called_at=? WHERE list_id=? AND lead_id=?',
                     (result,stamp,list_id,lead_id))
-        con.execute('INSERT INTO crm_notes(lead_id,author,text,created_at) VALUES(?,?,?,?)',
-                    (lead_id,'Michael','Phone: '+result+ ('\n'+note.strip() if note.strip() else ''),stamp))
+        note_id=con.execute('INSERT INTO crm_notes(lead_id,author,text,created_at) VALUES(?,?,?,?)',
+                    (lead_id,'Michael','Phone: '+result+ ('\n'+note.strip() if note.strip() else ''),stamp)).lastrowid
+        record_event(con,'note:'+str(note_id),lead_id,result,stamp)
 

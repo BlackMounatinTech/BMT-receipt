@@ -5,6 +5,22 @@
   const current = () => queue[position];
   const error = (id, message) => { $('#'+id).textContent = message || ''; $('#'+id).hidden = !message; };
   const pages = ['calling','booking','leads','calendar'];
+  function showCounts(counts) {
+    $('#calls-today').textContent=counts.today.toLocaleString();
+    $('#calls-total').textContent=counts.total.toLocaleString();
+    $('#counter-error').hidden=true;
+  }
+  async function refreshCounts() {
+    try{showCounts(await api('/api/calling/counts'));}
+    catch(e){$('#counter-error').textContent='Counter unavailable — refresh to retry.';$('#counter-error').hidden=false;}
+  }
+  $('#new-call-day').onclick=async()=>{
+    if(callBusy || !confirm('Reset today’s cold call count to zero? Your overall total and call history will stay.'))return;
+    $('#new-call-day').disabled=true;
+    try{showCounts(await api('/api/calling/new-day',{method:'POST',body:'{}'}));}
+    catch(e){$('#counter-error').textContent=e.message;$('#counter-error').hidden=false;}
+    finally{$('#new-call-day').disabled=false;}
+  };
   function page(name) {
     pages.forEach(p => $('#'+p+'-page').hidden = p !== name);
     if (['calling','booking'].includes(name)) {
@@ -26,6 +42,7 @@
       localStorage.setItem('bmt-call-list',listId);
     } else queue=[];
     renderCard();
+    await refreshCounts();
   }
   function jobFor(lead) { return jobs.find(j => j.lead_id===lead?.id); }
   function renderCard() {
@@ -174,5 +191,8 @@
     finally{callBusy=false;}
   };
   window.addEventListener('beforeunload',e=>{if(callBusy||$('#call-note').value.trim()){e.preventDefault();e.returnValue='';}});
+  refreshCounts();
+  setInterval(()=>{if(!document.hidden)refreshCounts();},30000);
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshCounts();});
   route();
 })();

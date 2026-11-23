@@ -150,6 +150,18 @@ def call_lists():
     return jsonify(lists=crm_calling.lists())
 
 
+@app.get('/api/calling/counts')
+def call_counts():
+    import crm_calling
+    return jsonify(crm_calling.call_counts())
+
+
+@app.post('/api/calling/new-day')
+def reset_call_day():
+    import crm_calling
+    return jsonify(crm_calling.call_counts(reset=True))
+
+
 @app.get('/api/calling/lists/<list_id>')
 def call_list(list_id):
     import crm_calling

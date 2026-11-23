@@ -4,6 +4,7 @@ import os
 import sys
 import tempfile
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
@@ -88,6 +89,7 @@ class CallingTests(unittest.TestCase):
         job=booking.resume(job['id'],provider,lambda *a:self.fail('Duplicate send'))
         self.assertEqual(job['state'],'complete')
         self.assertEqual(calling.items(result['list_id'])[0]['outcome'],'Booked')
+        self.assertEqual(calling.call_counts()['total'],1)
 
     def test_uncertain_zoom_and_concurrent_claim_block_retry(self):
         n=store.add_lead('Test','Pat','2125550100')
@@ -122,6 +124,38 @@ class CallingTests(unittest.TestCase):
         with patch('crm_booking.requests.get',return_value=response),patch('crm_booking.request_json') as create:
             event_id,url=provider.calendar({'host':{'calendar_id':'michael@example.com'}},'abc123','https://example.zoom.us/j/123')
             self.assertEqual(event_id,'bmtabc123');self.assertTrue(url);create.assert_not_called()
+
+    def test_daily_counter_reset_preserves_total_and_follows_vancouver_midnight(self):
+        result=self.upload('Company,Phone\nSample,2125550100\n','true').json
+        lead=calling.items(result['list_id'])[0]
+        first='2030-01-02T06:59:00+00:00' # Jan 1, 11:59 p.m. Vancouver
+        second='2030-01-02T07:01:00+00:00' # Jan 2, 12:01 a.m. Vancouver
+        with patch.object(store,'now',return_value=first):
+            calling.outcome(result['list_id'],lead['id'],lead['revision'],'No answer')
+        before=datetime.fromisoformat(first)
+        self.assertEqual(calling.call_counts(instant=before),dict(total=1,today=1,day='2030-01-01'))
+        self.assertEqual(calling.call_counts(reset=True,instant=before)['today'],0)
+        self.assertEqual(calling.call_counts(instant=before)['total'],1)
+        fresh=calling.items(result['list_id'])[0]
+        with patch.object(store,'now',return_value=second):
+            calling.outcome(result['list_id'],lead['id'],fresh['revision'],'Called')
+        counts=calling.call_counts(instant=datetime.fromisoformat(second))
+        self.assertEqual(counts,dict(total=2,today=1,day='2030-01-02'))
+        # Repeated reads/backfills never count the same event twice.
+        self.assertEqual(calling.call_counts(instant=datetime.fromisoformat(second)),counts)
+
+    def test_counter_backfill_and_reset_endpoint_are_safe(self):
+        n=store.add_lead('Existing','Pat','2125550100')
+        with store.connect() as con:
+            con.execute('INSERT INTO crm_notes(lead_id,author,text,created_at) VALUES(?,?,?,?)',
+                (n,'Michael','Phone: No answer\nOlder recorded call',store.now()))
+            con.execute('INSERT INTO crm_notes(lead_id,author,text,created_at) VALUES(?,?,?,?)',
+                (n,'Michael','Instagram DM sent',store.now()))
+        self.assertEqual(self.client.get('/api/calling/counts').json['total'],1)
+        self.assertEqual(self.client.get('/api/calling/counts').json['total'],1)
+        self.assertEqual(self.client.post('/api/calling/new-day').status_code,403)
+        counts=self.client.post('/api/calling/new-day',headers=self.headers).json
+        self.assertEqual(counts['total'],1);self.assertEqual(counts['today'],0)
 
 
 if __name__=='__main__':unittest.main()

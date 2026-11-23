@@ -13,6 +13,14 @@ Calendar succeed. Booking checks Google free/busy and CRM reservations. Calendar
 sends its invitation and the existing email service sends a BMT confirmation.
 Booking does not scrape or auto-call numbers. The role selector is not authentication.
 
+The top-right counter is shared across lists and users. It counts saved call
+attempts, including no answer and booking attempts, rather than unique companies.
+Existing Phone outcome notes are backfilled once; DMs are excluded. Booking retries
+do not add another call for the same lead revision. Today follows Vancouver's
+UTC−7 calendar day and rolls over at midnight. New day resets only today's count
+using an event marker; the overall count and call history are retained. Each saved
+outcome is counted transactionally, so rejected/stale saves cannot inflate totals.
+
 ## Connect the existing Render service
 
 Keep the existing service, disk and credentials. No new paid services are needed by
