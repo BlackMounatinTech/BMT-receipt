@@ -8,7 +8,7 @@ import crm_store as store
 
 app = Flask(__name__, template_folder='crm_templates', static_folder='crm_static', static_url_path='/crm-assets')
 app.secret_key = os.environ.get('CRM_SESSION_SECRET') or secrets.token_hex(32)
-app.config.update(MAX_CONTENT_LENGTH=100_000, SESSION_COOKIE_HTTPONLY=True,
+app.config.update(MAX_CONTENT_LENGTH=5_000_000, SESSION_COOKIE_HTTPONLY=True,
                   SESSION_COOKIE_SAMESITE='Strict', SESSION_COOKIE_SECURE=bool(os.environ.get('RENDER')),
                   SESSION_COOKIE_NAME='bmt_crm')
 
@@ -143,6 +143,94 @@ def confirm_appointment(n):
         if result.rowcount != 1:
             return jsonify(error='Send the confirmation first, or refresh if the appointment changed.'),409
     return {'ok':True}
+
+@app.get('/api/calling/lists')
+def call_lists():
+    import crm_calling
+    return jsonify(lists=crm_calling.lists())
+
+
+@app.get('/api/calling/lists/<list_id>')
+def call_list(list_id):
+    import crm_calling
+    return jsonify(leads=crm_calling.items(list_id))
+
+
+@app.post('/api/calling/import')
+def import_call_sheet():
+    import crm_calling
+    try:
+        file = request.files.get('file')
+        if not file or not file.filename:
+            raise ValueError('Choose a lead sheet.')
+        result = crm_calling.import_list(request.form.get('name') or file.filename,
+            crm_calling.rows_from_file(file),commit=request.form.get('commit')=='true')
+        return jsonify(result)
+    except (ValueError,UnicodeError,TypeError) as e:
+        return jsonify(error=str(e)),400
+    except Exception:
+        app.logger.exception('Sheet import failed')
+        return jsonify(error='Could not read that file. Export the lead tab as CSV and try again.'),400
+
+
+@app.post('/api/calling/lists/<list_id>/<int:lead_id>/outcome')
+def record_call(list_id,lead_id):
+    import crm_calling
+    try:
+        p = request.get_json(silent=True) or {}
+        crm_calling.outcome(list_id,lead_id,p.get('revision'),p.get('outcome'),p.get('note',''),p.get('follow_up'))
+        return {'ok':True}
+    except store.Conflict as e:
+        return jsonify(error=str(e)),409
+    except (ValueError,TypeError) as e:
+        return jsonify(error=str(e)),400
+
+
+@app.get('/api/booking/connections')
+def booking_connections():
+    import crm_booking
+    return jsonify(crm_booking.connection_status())
+
+
+@app.get('/api/booking/jobs')
+def booking_jobs():
+    import crm_booking
+    with store.connect() as con:
+        crm_booking.schema(con)
+        return jsonify(jobs=[crm_booking.public_job(dict(r)) for r in con.execute("SELECT * FROM crm_booking_jobs WHERE state!='abandoned' ORDER BY updated_at DESC")])
+
+
+@app.post('/api/leads/<int:lead_id>/book')
+def book_call(lead_id):
+    import crm_booking
+    try:
+        p = request.get_json(silent=True)
+        if not isinstance(p,dict): raise ValueError('Fill in the booking details.')
+        return jsonify(crm_booking.create(lead_id,p))
+    except store.Conflict as e:
+        return jsonify(error=str(e)),409
+    except (ValueError,TypeError,AttributeError) as e:
+        return jsonify(error=str(e)),400
+
+
+@app.post('/api/booking/jobs/<job_id>/resume')
+def resume_booking(job_id):
+    import crm_booking
+    try:
+        return jsonify(crm_booking.resume(job_id))
+    except (ValueError,TypeError) as e:
+        return jsonify(error=str(e)),400
+
+
+@app.post('/api/booking/jobs/<job_id>/abandon')
+def abandon_booking(job_id):
+    import crm_booking
+    try:
+        crm_booking.abandon(job_id)
+        return {'ok':True}
+    except ValueError as e:
+        return jsonify(error=str(e)),400
+
 
 if __name__ == '__main__':
     app.run(host='127.0.0.1', port=8518)

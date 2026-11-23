@@ -93,7 +93,7 @@ def add_lead(company, contact='', phone='', email='', need='', follow_up=None, *
     instagram = instagram_url(instagram)
     if not phone.strip() and not email.strip() and not instagram:
         raise ValueError('Add a phone number, email or Instagram profile.')
-    if stage not in ('Outreach', 'Prospect'):
+    if stage not in ('Outreach', 'Prospect', 'Cold'):
         raise ValueError('Choose Outreach or Active prospect.')
     stamp = now()
     with connect() as con:
@@ -131,11 +131,19 @@ def update_lead(lead_id, revision, *, company, contact, phone, email, need, stat
         previous = con.execute('SELECT * FROM crm_leads WHERE id=?', (lead_id,)).fetchone()
         if not previous or previous['revision'] != revision:
             raise Conflict('This lead changed in another session. Refresh the list before saving again.')
+        from crm_booking import schema as booking_schema
+        booking_schema(con)
+        booking = con.execute("SELECT * FROM crm_booking_jobs WHERE lead_id=? AND state!='abandoned' ORDER BY updated_at DESC LIMIT 1",(lead_id,)).fetchone()
+        if booking:
+            if booking['state'] != 'complete':
+                raise ValueError('Finish or review the booking in Calling before editing this lead.')
+            if (status != previous['status'] and status not in ('Won','Lost')) or any(previous[k] != v for k,v in [('call_date',call_date),('call_time',call_time),('call_zone',call_zone),('email',email.strip())]) or (zoom_url is not None and zoom_url.strip()!=previous['zoom_url']):
+                raise ValueError('This meeting is connected to Zoom and Google Calendar. Make schedule changes in those services first; the CRM does not yet sync reschedules or cancellations.')
         instagram = previous['instagram'] if instagram is None else instagram_url(instagram)
         stage = previous['stage'] if stage is None else stage
         if status in ('Call booked', 'Won'):
             stage = 'Prospect'
-        if stage not in ('Outreach', 'Prospect'):
+        if stage not in ('Outreach', 'Prospect', 'Cold'):
             raise ValueError('Choose Outreach or Active prospect.')
         if not phone.strip() and not email.strip() and not instagram:
             raise ValueError('Add a phone number, email or Instagram profile.')

@@ -17,7 +17,7 @@ async function api(path, options = {}) {
 function render() {
   const root = $('#lead-list'); root.replaceChildren();
   const query = $('#search').value.trim().toLowerCase();
-  const pool = leads.filter(l => pipeline === 'outreach' ? l.stage === 'Outreach' && !closed(l) : pipeline === 'customers' ? l.status === 'Won' : l.stage !== 'Outreach' || closed(l));
+  const pool = leads.filter(l => pipeline === 'outreach' ? l.stage === 'Outreach' && !closed(l) : pipeline === 'customers' ? l.status === 'Won' : l.stage === 'Prospect' || closed(l));
   const shown = pool.filter(l => (pipeline === 'customers' ? true : view === 'open' ? !closed(l) : view === 'new' ? !closed(l) && !l.seen_at : view === 'due' ? due(l) : closed(l)) && (!query || [l.company,l.contact,l.phone,l.email,l.need,l.location,l.instagram,l.contact_method,l.contact_account].join(' ').toLowerCase().includes(query)));
   const fresh = leads.filter(l => l.stage !== 'Outreach' && !closed(l) && !l.seen_at).length;
   $('#new-count').textContent = fresh || '';
@@ -189,6 +189,7 @@ function renderCalendar() {
   }
 }
 function showPage(page) {
+  if (['calling','booking'].includes(location.hash.slice(1))) return;
   pipeline=page; view='open';
   $('#leads-page').hidden=page==='calendar';$('#calendar-page').hidden=page!=='calendar';
   for (const [id,name] of [['nav-outreach','outreach'],['nav-leads','prospects'],['nav-customers','customers'],['nav-calendar','calendar']]) $('#'+id).classList.toggle('active',page===name);

@@ -52,7 +52,7 @@ def preview(lead, kind='confirmation'):
     body = (f"Hi {lead['contact'] or 'there'},\n\n" +
             ('A quick reminder about our call.\n\n' if reminder else 'Great speaking with you. Here are the details for our call:\n\n') +
             f"Date and time: {stamp}\nLength: 30 minutes\nZoom link: {lead['zoom_url']}\n\n" +
-            "We’ll walk through your website and social media, and how BMT can help your business.\n\n" +
+            "We’ll discuss your online presence, your project photos, and how BMT can help showcase your work.\n\n" +
             ('' if lead['confirmed_at'] else 'Please reply “confirmed” so we know you received this.\n\n') +
             'If you need to change the time, just reply to this email.\n\nMichael\nBlack Mountain Technologies')
     return dict(to=lead['email'],subject=subject,body=body)
