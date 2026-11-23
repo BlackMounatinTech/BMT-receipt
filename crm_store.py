@@ -51,6 +51,7 @@ def connect():
         'stage': "TEXT NOT NULL DEFAULT 'Prospect'", 'instagram': "TEXT NOT NULL DEFAULT ''",
         'location': "TEXT NOT NULL DEFAULT ''", 'contact_method': "TEXT NOT NULL DEFAULT ''",
         'contact_account': "TEXT NOT NULL DEFAULT ''", 'last_contacted_at': 'TEXT',
+        'lead_timezone': "TEXT NOT NULL DEFAULT ''",
     }.items():
         if name not in columns:
             try:

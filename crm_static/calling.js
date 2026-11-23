@@ -85,6 +85,21 @@
     await refreshCounts();
   }
   function jobFor(lead) { return jobs.find(j => j.lead_id===lead?.id); }
+  function updateCompanyClock(){
+    const zone=current()&&BMTLeadTime.zoneFor(current());
+    const clock=zone&&BMTLeadTime.clock(zone);
+    $('#company-clock').textContent=clock?`Their time: ${clock.time} · ${clock.label} vs Vancouver`:'Choose the company’s time zone to show its local time.';
+  }
+  $('#company-zone').onchange=async()=>{
+    const lead=current(),zone=$('#company-zone').value;
+    if(!lead)return;
+    if(!zone||callBusy){$('#company-zone').value=BMTLeadTime.zoneFor(lead);return;}
+    $('#company-zone').disabled=true;
+    try{await api(`/api/calling/leads/${lead.id}/timezone`,{method:'POST',body:JSON.stringify({zone})});lead.lead_timezone=zone;updateCompanyClock();}
+    catch(e){$('#company-zone').value=BMTLeadTime.zoneFor(lead);error('call-error',e.message);}
+    finally{$('#company-zone').disabled=false;}
+  };
+  setInterval(()=>{if(!document.hidden&&current())updateCompanyClock();},15000);
   function renderCard() {
     const lead = current(); $('#call-card').hidden = !lead; $('#call-empty').hidden = !!lead;
     $('#call-previous').disabled = !lead || position===0; $('#call-next').disabled = !lead || position>=queue.length-1;
@@ -93,6 +108,7 @@
     localStorage.setItem('bmt-call-position:'+listId,String(lead.id));
     $('#call-company').textContent = lead.company;
     $('#call-location').textContent = lead.location || 'Location not recorded';
+    $('#company-zone').value=BMTLeadTime.zoneFor(lead);updateCompanyClock();
     $('#call-status').textContent = lead.outcome || lead.status;
     $('#call-phone').textContent = lead.phone || 'No phone number';
     $('#call-phone').href = 'tel:'+lead.phone.replace(/[^+\d]/g,'');
@@ -190,7 +206,7 @@
     if(!await canLeave())return;
     bookingLead=current();currentJob=null;bookingForm.reset();
     bf('contact').value=bookingLead.contact;bf('email').value=bookingLead.email;bf('note').value=$('#call-note').value;
-    bf('zone').value=bookingLead.call_zone||'';
+    bf('zone').value=bookingLead.call_zone||Object.keys(BMTLeadTime.labels).find(k=>BMTLeadTime.labels[k]===BMTLeadTime.zoneFor(bookingLead))||'';
     $('#booking-company').textContent=bookingLead.company;$('#booking-result').hidden=true;bookingForm.hidden=false;error('booking-error','');
     try {
       const c=await connectionInfo();bf('host_id').replaceChildren(new Option('Choose the meeting host',''));

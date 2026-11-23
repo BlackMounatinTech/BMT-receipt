@@ -200,5 +200,17 @@ class CallingTests(unittest.TestCase):
         calling.outcome(result['list_id'],lead['id'],lead['revision'],'Called','Previously saved note')
         self.assertEqual(calling.items(result['list_id'])[0]['call_notes'],'Previously saved note')
 
+    def test_company_timezone_persists_without_changing_appointment_or_call_count(self):
+        result=self.upload('Company,Phone\nFirst,2125550100\n','true').json
+        lead=calling.items(result['list_id'])[0]
+        path=f"/api/calling/leads/{lead['id']}/timezone"
+        self.assertEqual(self.client.post(path,json={'zone':'America/New_York'},headers=self.headers).status_code,200)
+        saved=calling.items(result['list_id'])[0]
+        self.assertEqual(saved['lead_timezone'],'America/New_York')
+        self.assertEqual(saved['revision'],lead['revision']);self.assertFalse(saved['call_zone'])
+        self.assertEqual(calling.call_counts()['total'],0)
+        self.assertEqual(self.client.post(path,json={'zone':'Made/up'},headers=self.headers).status_code,400)
+        self.assertEqual(self.client.post(path,json={'zone':'America/New_York'}).status_code,403)
+
 
 if __name__=='__main__':unittest.main()

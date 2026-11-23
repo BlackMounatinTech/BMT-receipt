@@ -102,3 +102,11 @@ Both emails were observed in the recipient inbox. The test calendar event was th
 canceled, the Zoom meeting deleted (recoverable for seven days), and the test CRM
 record closed with a verification note. The test did not increase cold-call counts.
 Live connection readiness verified true for Zoom, Google Calendar and email.
+
+## Lead local clock
+
+Calling cards show a live company clock and its current offset from Vancouver
+(UTC-7). Company time zones persist separately from appointment time zones.
+Explicit company zones take priority; split-zone states require a verified zone.
+The existing BMT 100 Saturday list uses the researched Eastern company zones.
+Run `node tests/test_lead_time.cjs` for seasonal offset checks.

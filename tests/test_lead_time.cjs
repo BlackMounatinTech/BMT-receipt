@@ -1,0 +1,17 @@
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+const context=vm.createContext({Intl,Date});
+vm.runInContext(fs.readFileSync(require('node:path').join(__dirname,'../crm_static/lead_time.js'),'utf8'),context);
+const {clock,zoneFor}=context.BMTLeadTime;
+const winter=new Date('2026-11-23T17:30:00Z'),summer=new Date('2027-07-01T17:30:00Z');
+assert.equal(clock('America/New_York',winter).time,'12:30 PM');
+assert.equal(clock('America/New_York',winter).label,'+2 hours');
+assert.equal(clock('America/New_York',summer).label,'+3 hours');
+assert.equal(clock('America/Chicago',winter).label,'+1 hour');
+assert.equal(clock('America/Denver',winter).label,'Same time');
+assert.equal(clock('America/Los_Angeles',winter).label,'-1 hour');
+assert.equal(clock('America/Phoenix',winter).label,'Same time');
+assert.equal(zoneFor({location:'Charlotte, NC'}),'America/New_York');
+assert.equal(zoneFor({location:'Tallahassee, FL'}),'');
+assert.equal(zoneFor({location:'Phenix City, AL',lead_timezone:'America/New_York'}),'America/New_York');
+assert.equal(zoneFor({location:'Unknown',call_zone:'Central'}),'America/Chicago');
+console.log('Lead clocks: time, daylight changes, offsets and explicit-zone precedence passed.');

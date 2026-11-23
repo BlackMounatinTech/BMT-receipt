@@ -211,6 +211,19 @@ def save_call_notes(lead_id):
         return jsonify(error=str(e)),400
 
 
+@app.post('/api/calling/leads/<int:lead_id>/timezone')
+def save_lead_timezone(lead_id):
+    from crm_appointments import ZONES
+    data=request.get_json(silent=True) or {}
+    zone=data.get('zone') if isinstance(data,dict) else None
+    if zone not in [*ZONES.values(),'Etc/GMT+7']:
+        return jsonify(error='Choose a valid company time zone.'),400
+    with store.connect() as con:
+        result=con.execute('UPDATE crm_leads SET lead_timezone=? WHERE id=?',(zone,lead_id))
+        if result.rowcount!=1:return jsonify(error='Lead not found.'),404
+    return jsonify(zone=zone)
+
+
 @app.get('/api/booking/connections')
 def booking_connections():
     import crm_booking
