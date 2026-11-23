@@ -132,6 +132,7 @@ async function openEmail(lead) {
     const data = await api(`/api/leads/${lead.id}/appointment-email`);
     emailLead = lead; emailVersion = data.version;
     $('#email-to').textContent = 'To: ' + data.to;
+    $('#booking-correct-email').value=data.to;
     $('#email-subject').textContent = data.subject; $('#email-body').textContent = data.body;
     $('#send-email').disabled = !!data.sent_at; $('#send-email').textContent = data.sent_at ? 'Confirmation sent' : 'Send confirmation';
     $('#confirm-reply').disabled = !data.sent_at || !!data.confirmed_at;
@@ -149,11 +150,27 @@ $('#close-email').onclick = () => { if (!emailBusy) emailDialog.close(); };
 emailDialog.oncancel = event => { if (emailBusy) event.preventDefault(); };
 $('#send-email').onclick = async () => {
   if (emailBusy) return;
+  if($('#booking-correct-email').value.trim()!==emailLead.email){$('#email-error').textContent='Use Save email & resend booking to apply the corrected address.';$('#email-error').hidden=false;return;}
   if (retryKind && !confirm('Check your Sent mail first. Try sending this email again?')) return;
   emailBusy = true; $('#send-email').disabled = true; $('#send-email').textContent = 'Sending…';
   try { await api(`/api/leads/${emailLead.id}/appointment-email`,{method:'POST',body:JSON.stringify({version:emailVersion,kind:retryKind || 'confirmation',retry:!!retryKind})}); await load(); await openEmail(leads.find(l=>l.id===emailLead.id)); }
   catch(e) { $('#email-error').textContent = e.message; $('#email-error').hidden = false; $('#send-email').textContent = 'Send attempted'; retryKind = retryKind || 'confirmation'; $('#send-email').disabled = false; $('#send-email').textContent = 'Retry ' + retryKind; }
   finally { emailBusy = false; }
+};
+$('#correct-booking-email').onclick = async () => {
+  if(emailBusy)return;
+  const email=$('#booking-correct-email').value.trim();
+  if(!$('#booking-correct-email').reportValidity() || !email)return;
+  emailBusy=true; $('#correct-booking-email').disabled=true; $('#send-email').disabled=true; $('#confirm-reply').disabled=true;
+  $('#correct-booking-email').textContent='Updating & sending…'; $('#email-error').hidden=true;
+  try {
+    await api(`/api/leads/${emailLead.id}/booking-email`,{method:'POST',body:JSON.stringify({version:emailVersion,email})});
+    await load(); await openEmail(leads.find(l=>l.id===emailLead.id));
+    $('#email-state').textContent='Booking sent to '+email+'. The time and Zoom link are unchanged.';
+  } catch(e) {
+    await load(); await openEmail(leads.find(l=>l.id===emailLead.id));
+    $('#email-error').textContent=e.message+' Your correction is saved if the address above changed. Retry this button to finish.'; $('#email-error').hidden=false;
+  } finally {emailBusy=false;$('#correct-booking-email').disabled=false;$('#correct-booking-email').textContent='Save email & resend booking';}
 };
 $('#confirm-reply').onclick = async () => {
   $('#confirm-reply').disabled = true;

@@ -132,14 +132,16 @@ def update_lead(lead_id, revision, *, company, contact, phone, email, need, stat
         previous = con.execute('SELECT * FROM crm_leads WHERE id=?', (lead_id,)).fetchone()
         if not previous or previous['revision'] != revision:
             raise Conflict('This lead changed in another session. Refresh the list before saving again.')
-        from crm_booking import schema as booking_schema
-        booking_schema(con)
+        from crm_booking import schema as booking_schema, correction_schema
+        booking_schema(con); correction_schema(con)
+        if con.execute("SELECT 1 FROM crm_booking_corrections WHERE lead_id=? AND state!='complete'",(lead_id,)).fetchone():
+            raise ValueError('Finish the pending booking email correction before editing this lead.')
         booking = con.execute("SELECT * FROM crm_booking_jobs WHERE lead_id=? AND state!='abandoned' ORDER BY updated_at DESC LIMIT 1",(lead_id,)).fetchone()
         if booking:
             if booking['state'] != 'complete':
                 raise ValueError('Finish or review the booking in Calling before editing this lead.')
             if (status != previous['status'] and status not in ('Won','Lost')) or any(previous[k] != v for k,v in [('call_date',call_date),('call_time',call_time),('call_zone',call_zone),('email',email.strip())]) or (zoom_url is not None and zoom_url.strip()!=previous['zoom_url']):
-                raise ValueError('This meeting is connected to Zoom and Google Calendar. Make schedule changes in those services first; the CRM does not yet sync reschedules or cancellations.')
+                raise ValueError('To correct an email, open Edit email / resend confirmation. This meeting is connected to Zoom and Google Calendar. Make schedule changes in those services first; the CRM does not yet sync reschedules or cancellations.')
         instagram = previous['instagram'] if instagram is None else instagram_url(instagram)
         stage = previous['stage'] if stage is None else stage
         if status in ('Call booked', 'Won'):

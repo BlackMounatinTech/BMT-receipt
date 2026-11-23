@@ -110,3 +110,13 @@ Calling cards show a live company clock and its current offset from Vancouver
 Explicit company zones take priority; split-zone states require a verified zone.
 The existing BMT 100 Saturday list uses the researched Eastern company zones.
 Run `node tests/test_lead_time.cjs` for seasonal offset checks.
+
+## Correct a booked recipient
+
+Open a booked lead → Edit email / resend confirmation, or use Edit email / resend
+on the booking result. Save email & resend booking persists a new booking message
+version, replaces the customer attendee on the existing Google event, and sends
+the confirmation. Time, Zoom meeting, host and unrelated guests stay intact.
+Corrections preserve a durable pending state; retry the same address to finish a
+failed Calendar/email step. An interrupted SMTP claim is held for Sent mail review.
+Calendar attendee updates follow the provider API: https://developers.google.com/workspace/calendar/api/v3/reference/events/patch

@@ -46,6 +46,62 @@ class CallingTests(unittest.TestCase):
         counts=self.client.post('/api/calling/new-day',headers=self.headers).json
         self.assertEqual((counts['booked'],counts['closes']),(2,2))
 
+    def correction_booking(self):
+        n=store.add_lead('Correction test','Pat','2125550100',email='typo@example.com')
+        with store.connect() as con:
+            con.execute("UPDATE crm_leads SET status='Call booked',call_date='2030-01-02',call_time='09:00',call_zone='Eastern',call_start_utc='2030-01-02T14:00:00+00:00',zoom_url='https://example.zoom.us/j/123',booking_version=1,confirmation_sent_at=?,booked_at=? WHERE id=?",(store.now(),store.now(),n))
+            booking.schema(con)
+            con.execute("INSERT INTO crm_booking_jobs(id,lead_id,payload,state,event_id,zoom_url,updated_at) VALUES('original',?,?,'complete','event123','https://example.zoom.us/j/123',?)",(n,json.dumps({'email':'typo@example.com','host':{'calendar_id':'host@example.com'}}),store.now()))
+        return n
+
+    def test_correct_booking_email_resumes_calendar_failure_without_new_meeting(self):
+        n=self.correction_booking()
+        provider=unittest.mock.Mock()
+        provider.correct_attendee.side_effect=booking.ProviderError('Calendar unavailable')
+        sent=[]
+        sender=lambda *args: sent.append(args) or {'ok':True}
+        with self.assertRaisesRegex(ValueError,'Calendar unavailable'):
+            booking.correct_email(n,1,'correct@example.com',provider,sender)
+        lead=store.list_leads()[0]
+        self.assertEqual((lead['email'],lead['booking_version']),('correct@example.com',2))
+        self.assertEqual(sent,[])
+        with self.assertRaisesRegex(ValueError,'calendar invitation'):
+            __import__('crm_appointments').send(n,2,sender=sender)
+        provider.correct_attendee.side_effect=None
+        booking.correct_email(n,2,'correct@example.com',provider,sender)
+        self.assertEqual(len(sent),1);self.assertEqual(sent[0][0],'correct@example.com')
+        lead=store.list_leads()[0]
+        self.assertEqual(lead['zoom_url'],'https://example.zoom.us/j/123')
+        self.assertEqual(lead['call_start_utc'],'2030-01-02T14:00:00+00:00')
+        self.assertTrue(lead['confirmation_sent_at'])
+        with self.assertRaises(store.Conflict): booking.correct_email(n,1,'correct@example.com',provider,sender)
+        self.assertEqual(len(sent),1)
+        self.assertEqual(calling.pipeline_counts()['booked'],1)
+
+    def test_correct_booking_email_smtp_retry_and_endpoint_validation(self):
+        n=self.correction_booking();provider=unittest.mock.Mock()
+        with self.assertRaisesRegex(ValueError,'delivery failed'):
+            booking.correct_email(n,1,'correct@example.com',provider,lambda *a:{'ok':False})
+        booking.correct_email(n,2,'correct@example.com',provider,lambda *a:{'ok':True})
+        self.assertEqual(provider.correct_attendee.call_count,1)
+        path=f'/api/leads/{n}/booking-email'
+        self.assertEqual(self.client.post(path,json={'version':2,'email':'bad'},headers=self.headers).status_code,400)
+        self.assertEqual(self.client.post(path,json={'version':2,'email':'new@example.com'}).status_code,403)
+
+    def test_calendar_email_correction_preserves_other_guests_and_recovers_patch(self):
+        provider=booking.Providers();provider.google_token='mock'
+        event={'attendees':[{'email':'typo@example.com'},{'email':'host@example.com','organizer':True},{'email':'closer@example.com'}]}
+        details={'host':{'calendar_id':'host@example.com'}}
+        with patch.object(booking,'request_json',side_effect=[event,{}]) as request:
+            provider.correct_attendee(details,'event123','typo@example.com','correct@example.com')
+            payload=request.call_args.kwargs['json']
+            self.assertEqual({a['email'] for a in payload['attendees']},{'host@example.com','closer@example.com','correct@example.com'})
+            self.assertEqual(set(payload),{'attendees'})
+        event['attendees']=payload['attendees']
+        with patch.object(booking,'request_json',return_value=event) as request:
+            provider.correct_attendee(details,'event123','typo@example.com','correct@example.com')
+            self.assertEqual(request.call_count,1)
+
     def upload(self,raw,commit='false'):
         return self.client.post('/api/calling/import',data={'name':'Test list','file':(io.BytesIO(raw.encode()),'leads.csv'),'commit':commit},headers=self.headers)
 

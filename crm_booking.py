@@ -145,6 +145,86 @@ class Providers:
         return event_id,event.get('htmlLink','')
 
 
+    def correct_attendee(self, details, event_id, old_email, email):
+        if not event_id: raise ValueError('The calendar invitation is missing. Review the booking first.')
+        url='https://www.googleapis.com/calendar/v3/calendars/'+quote(details['host']['calendar_id'],safe='')+'/events/'+quote(event_id,safe='')
+        event=request_json('GET',url,headers=self.google_headers())
+        if event.get('status')=='cancelled': raise ValueError('This calendar invitation was canceled.')
+        attendees=event.get('attendees',[])
+        if any(a.get('email','').lower()==email.lower() for a in attendees) and not any(a.get('email','').lower()==old_email.lower() for a in attendees if old_email.lower()!=email.lower()):
+            return
+        updated=[a for a in attendees if a.get('email','').lower() not in (old_email.lower(),email.lower()) or a.get('organizer')]
+        if not any(a.get('email','').lower()==email.lower() for a in updated): updated.append({'email':email})
+        request_json('PATCH',url,mutation=True,headers=self.google_headers(),params={'sendUpdates':'all'},
+                     json={'attendees':updated},)
+
+
+def correction_schema(con):
+    con.execute("""CREATE TABLE IF NOT EXISTS crm_booking_corrections (
+        lead_id INTEGER PRIMARY KEY, version INTEGER NOT NULL, old_email TEXT NOT NULL,
+        email TEXT NOT NULL, calendar_done INTEGER NOT NULL DEFAULT 0,
+        state TEXT NOT NULL, busy INTEGER NOT NULL DEFAULT 0)""")
+
+
+def correct_email(lead_id, version, email, providers=None, sender=None):
+    """Persist a recipient correction before synchronizing the existing invitation."""
+    from crm_appointments import preview, send, messages_table
+    email = email.strip() if isinstance(email,str) else ''
+    if len(email)>250 or not re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@]+',email):
+        raise ValueError('Enter a valid customer email.')
+    with store.connect() as con:
+        schema(con); correction_schema(con); messages_table(con)
+        con.execute('BEGIN IMMEDIATE')
+        lead=con.execute('SELECT * FROM crm_leads WHERE id=?',(lead_id,)).fetchone()
+        if not lead or lead['booking_version']!=version:
+            raise store.Conflict('This appointment changed. Reopen it before correcting the email.')
+        preview(dict(lead))
+        if datetime.fromisoformat(lead['call_start_utc'])<=datetime.now(timezone.utc):
+            raise ValueError('This appointment has passed. Book a future call before sending.')
+        job=con.execute("SELECT * FROM crm_booking_jobs WHERE lead_id=? AND state!='abandoned' ORDER BY updated_at DESC LIMIT 1",(lead_id,)).fetchone()
+        if job and (job['state']!='complete' or job['busy']):
+            raise ValueError('Finish or review the original booking before correcting its email.')
+        correction=con.execute('SELECT * FROM crm_booking_corrections WHERE lead_id=?',(lead_id,)).fetchone()
+        if correction and correction['state']!='complete':
+            if correction['busy']:
+                raise ValueError('An email correction is already processing. If interrupted, check Calendar and Sent mail before recovery.')
+            if correction['email']!=email or correction['version']!=version:
+                raise ValueError('Finish the pending email correction before changing the address again.')
+            calendar_done=correction['calendar_done'];old_email=correction['old_email']
+            con.execute('UPDATE crm_booking_corrections SET busy=1 WHERE lead_id=?',(lead_id,))
+        else:
+            if con.execute("SELECT 1 FROM crm_appointment_messages WHERE lead_id=? AND state='sending'",(lead_id,)).fetchone():
+                raise ValueError('An email send is unresolved. Check Sent mail before correcting the recipient.')
+            old_email=lead['email'];version+=1;calendar_done=not bool(job)
+            con.execute("INSERT OR REPLACE INTO crm_booking_corrections VALUES(?,?,?,?,?,'pending',1)",
+                        (lead_id,version,old_email,email,int(calendar_done)))
+            con.execute("""UPDATE crm_leads SET email=?,booking_version=?,confirmation_sent_at=NULL,
+                confirmed_at=NULL,reminder_sent_at=NULL,revision=revision+1,updated_at=? WHERE id=?""",
+                (email,version,store.now(),lead_id))
+            con.execute('INSERT INTO crm_notes(lead_id,author,text,created_at) VALUES(?,?,?,?)',
+                        (lead_id,'Michael','Booking email corrected from '+old_email+' to '+email,store.now()))
+    try:
+        if not calendar_done:
+            provider=providers or Providers()
+            provider.correct_attendee(json.loads(job['payload']),job['event_id'],old_email,email)
+            with store.connect() as con:
+                details=json.loads(job['payload']);details['email']=email
+                con.execute('UPDATE crm_booking_jobs SET payload=?,updated_at=? WHERE id=?',(json.dumps(details),store.now(),job['id']))
+                con.execute('UPDATE crm_booking_corrections SET calendar_done=1 WHERE lead_id=?',(lead_id,))
+        # Existing message claims make retries safe after a lost HTTP response.
+        with store.connect() as con:
+            message=con.execute("SELECT state FROM crm_appointment_messages WHERE lead_id=? AND booking_version=? AND kind='confirmation'",(lead_id,version)).fetchone()
+        if not message or message['state']!='sent':
+            send(lead_id,version,sender=sender,retry=True)
+        with store.connect() as con:
+            con.execute("UPDATE crm_booking_corrections SET state='complete',busy=0 WHERE lead_id=?",(lead_id,))
+        return dict(ok=True,version=version)
+    except Exception:
+        with store.connect() as con:
+            con.execute('UPDATE crm_booking_corrections SET busy=0 WHERE lead_id=?',(lead_id,))
+        raise
+
+
 def create(lead_id, data):
     if not connection_status()['ready']:
         raise ValueError('Connect Zoom, Google Calendar and email, and add a meeting host before booking.')

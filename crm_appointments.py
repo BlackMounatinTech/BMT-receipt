@@ -67,11 +67,17 @@ def send(lead_id, version, kind='confirmation', sender=None, retry=False):
     # Claim once before contacting SMTP. An interrupted send is never automatically retried.
     with store.connect() as con:
         messages_table(con)
+        con.execute('BEGIN IMMEDIATE')
         lead = con.execute('SELECT * FROM crm_leads WHERE id=?',(lead_id,)).fetchone()
         if not lead or lead['booking_version'] != version:
             raise store.Conflict('This appointment changed. Reopen it before sending.')
         if datetime.fromisoformat(lead['call_start_utc'] or '2000-01-01T00:00:00+00:00') <= datetime.now(timezone.utc):
             raise ValueError('Choose a future appointment time before sending.')
+        from crm_booking import correction_schema
+        correction_schema(con)
+        pending=con.execute('SELECT calendar_done FROM crm_booking_corrections WHERE lead_id=? AND version=?',(lead_id,version)).fetchone()
+        if pending and not pending['calendar_done']:
+            raise ValueError('Finish updating the calendar invitation before sending this email.')
         message = preview(dict(lead),kind)
         existing = con.execute('SELECT state FROM crm_appointment_messages WHERE lead_id=? AND booking_version=? AND kind=?',(lead_id,version,kind)).fetchone()
         if existing and not (existing['state'] == 'failed' and retry):

@@ -231,11 +231,16 @@
     $('#booking-time-preview').textContent=`Their time: ${d} ${t} ${z} · Your time: `+new Intl.DateTimeFormat('en-US',{timeZone:'Etc/GMT+7',dateStyle:'medium',timeStyle:'short'}).format(utc)+' Vancouver';
   }
   bookingForm.oninput=e=>{previewTime();if(e.target.name==='note'&&bookingLead){$('#call-note').value=bf('note').value;rememberDraft(bookingLead,bf('note').value);}};
+  $('#booking-edit-email').onclick=async()=>{
+    try{const data=await api('/api/leads');await openEmail(data.leads.find(l=>l.id===currentJob.lead_id));}
+    catch(e){$('#booking-result-state').textContent=e.message;}
+  };
   function showResult(job){
     currentJob=job;bookingForm.hidden=true;$('#booking-result').hidden=false;
     $('#booking-result-title').textContent=job.state==='complete'?'Meeting booked':'Booking needs attention';
     $('#booking-result-state').textContent=job.state==='complete'?'Zoom created · Google Calendar invitation sent · BMT confirmation sent.':job.error||'Booking in progress. Check the provider before retrying.';
     for(const [id,url]of[['booking-zoom',job.zoom_url],['booking-calendar',job.event_url]]){$('#'+id).hidden=!url;if(url)$('#'+id).href=url;}
+    $('#booking-edit-email').hidden=job.state!=='complete';
     $('#booking-retry').hidden=job.state==='complete'||job.state==='review'||!!job.busy;
     $('#booking-abandon').hidden=job.state!=='failed'||!!job.zoom_url||!!job.busy;
     $('#booking-next').textContent=job.state==='complete'?'Next lead →':'Back to calling';

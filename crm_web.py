@@ -135,6 +135,19 @@ def send_appointment_email(n):
     except ValueError as e:
         return jsonify(error=str(e)),400
 
+@app.post('/api/leads/<int:n>/booking-email')
+def correct_booking_email(n):
+    import crm_booking
+    p=request.get_json(silent=True) or {}
+    try:
+        if not isinstance(p,dict) or type(p.get('version')) is not int:
+            raise ValueError('Reopen this appointment before correcting its email.')
+        return jsonify(crm_booking.correct_email(n,p['version'],p.get('email')))
+    except store.Conflict as e:
+        return jsonify(error=str(e)),409
+    except ValueError as e:
+        return jsonify(error=str(e)),400
+
 @app.post('/api/leads/<int:n>/confirm-appointment')
 def confirm_appointment(n):
     p = request.get_json(silent=True) or {}
