@@ -1,6 +1,6 @@
 const $ = q => document.querySelector(q);
 const form = $('#lead-form'), modal = $('#editor');
-let pipeline = ['outreach','customers','calendar'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'prospects';
+let pipeline = ['outreach','customers','calendar','followups'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'prospects';
 let leads = [], view = 'open', editing = null, baseline = '', busy = false;
 const el = (tag, cls, text) => { const n = document.createElement(tag); n.className = cls; if (text != null) n.textContent = text; return n; };
 const today = () => new Intl.DateTimeFormat('en-CA', {timeZone:'Etc/GMT+7', year:'numeric', month:'2-digit', day:'2-digit'}).format(new Date());
@@ -17,13 +17,14 @@ async function api(path, options = {}) {
 function render() {
   const root = $('#lead-list'); root.replaceChildren();
   const query = $('#search').value.trim().toLowerCase();
-  const pool = leads.filter(l => pipeline === 'outreach' ? l.stage === 'Outreach' && !closed(l) : pipeline === 'customers' ? l.status === 'Won' : l.stage === 'Prospect' || closed(l));
+  const pool = leads.filter(l => pipeline === 'followups' ? !!l.follow_up && !closed(l) && l.status !== 'Call booked' : pipeline === 'outreach' ? l.stage === 'Outreach' && !closed(l) : pipeline === 'customers' ? l.status === 'Won' : l.stage === 'Prospect' || closed(l));
+  if(pipeline==='followups')pool.sort((a,b)=>a.follow_up.localeCompare(b.follow_up)||a.company.localeCompare(b.company));
   const shown = pool.filter(l => (pipeline === 'customers' ? true : view === 'open' ? !closed(l) : view === 'new' ? !closed(l) && !l.seen_at : view === 'due' ? due(l) : closed(l)) && (!query || [l.company,l.contact,l.phone,l.email,l.need,l.location,l.instagram,l.contact_method,l.contact_account].join(' ').toLowerCase().includes(query)));
   const fresh = leads.filter(l => l.stage !== 'Outreach' && !closed(l) && !l.seen_at).length;
   $('#new-count').textContent = fresh || '';
-  $('#pipeline-title').textContent = pipeline === 'outreach' ? 'Outreach' : pipeline === 'customers' ? 'Customers' : 'Active prospects';
+  $('#pipeline-title').textContent = pipeline === 'followups' ? 'Follow-ups' : pipeline === 'outreach' ? 'Outreach' : pipeline === 'customers' ? 'Customers' : 'Active prospects';
   $('#lead-filters').hidden = pipeline !== 'prospects';
-  $('#summary').textContent = pipeline === 'outreach' ? `${pool.length} contacted · interest not yet confirmed` : pipeline === 'customers' ? `${pool.length} customers` : `${pool.filter(l=>!closed(l)).length} active · ${pool.filter(due).length} to follow up`;
+  $('#summary').textContent = pipeline === 'followups' ? `${pool.length} scheduled · ${pool.filter(due).length} due or overdue · includes future dates` : pipeline === 'outreach' ? `${pool.length} contacted · interest not yet confirmed` : pipeline === 'customers' ? `${pool.length} customers` : `${pool.filter(l=>!closed(l)).length} active · ${pool.filter(due).length} to follow up`;
   if (!shown.length) {
     const box = el('div', 'empty');
     box.append(el('h2','',!leads.length ? 'Add your first lead.' : 'Nothing here right now.'),el('p','',!leads.length ? 'Put in their details and a few notes. Your closer can take it from there.' : 'Try another filter or search.'));
@@ -39,6 +40,7 @@ function render() {
     if (lead.contact_method) left.append(el('div','contact-trail',[lead.contact_method,lead.contact_account ? 'from '+(['Instagram DM','Facebook DM'].includes(lead.contact_method)?'@':'')+lead.contact_account.replace(/^@/,'') : '',lead.last_contacted_at ? new Intl.DateTimeFormat('en-US',{timeZone:'Etc/GMT+7',month:'short',day:'numeric'}).format(new Date(lead.last_contacted_at)) : ''].filter(Boolean).join(' · ')));
     const right = el('div','lead-right');
     if (due(lead)) right.append(el('span','due',lead.follow_up === today() ? 'Follow up today' : 'Follow-up overdue'));
+    if (pipeline==='followups')right.append(el('span','followup-date',new Date(lead.follow_up+'T12:00:00Z').toLocaleDateString('en-US',{timeZone:'UTC',month:'short',day:'numeric',year:'numeric'})));
     right.append(el('span','badge' + (lead.status === 'Call booked' ? ' booked' : lead.status === 'Won' ? ' won' : ''),lead.status),el('span','chevron','›'));
     row.append(left,right); row.onclick = () => openLead(lead); root.append(row);
   }
@@ -192,12 +194,12 @@ function showPage(page) {
   if (['calling','booking'].includes(location.hash.slice(1))) return;
   pipeline=page; view='open';
   $('#leads-page').hidden=page==='calendar';$('#calendar-page').hidden=page!=='calendar';
-  for (const [id,name] of [['nav-outreach','outreach'],['nav-leads','prospects'],['nav-customers','customers'],['nav-calendar','calendar']]) $('#'+id).classList.toggle('active',page===name);
+  for (const [id,name] of [['nav-outreach','outreach'],['nav-leads','prospects'],['nav-customers','customers'],['nav-calendar','calendar'],['nav-followups','followups']]) $('#'+id).classList.toggle('active',page===name);
   document.querySelectorAll('[data-view]').forEach(b=>b.classList.toggle('selected',b.dataset.view==='open'));
   if(page==='calendar')renderCalendar();else render();
 }
-for (const [id,page] of [['nav-outreach','outreach'],['nav-leads','prospects'],['nav-customers','customers'],['nav-calendar','calendar']]) $('#'+id).onclick=()=>{location.hash=page;showPage(page)};
-window.addEventListener('hashchange',()=>showPage(['outreach','customers','calendar'].includes(location.hash.slice(1))?location.hash.slice(1):'prospects'));
+for (const [id,page] of [['nav-outreach','outreach'],['nav-leads','prospects'],['nav-customers','customers'],['nav-calendar','calendar'],['nav-followups','followups']]) $('#'+id).onclick=()=>{location.hash=page;showPage(page)};
+window.addEventListener('hashchange',()=>showPage(['outreach','customers','calendar','followups'].includes(location.hash.slice(1))?location.hash.slice(1):'prospects'));
 showPage(pipeline);
 $('#calendar-today').onclick=()=>{calendarDay=today();calendarMonth=calendarDay.slice(0,7);renderCalendar()};
 for(const [id,delta] of [['previous-month',-1],['next-month',1]])$('#'+id).onclick=()=>{const d=dayDate(calendarMonth+'-01');d.setUTCMonth(d.getUTCMonth()+delta);calendarMonth=d.toISOString().slice(0,7);renderCalendar()};

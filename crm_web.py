@@ -198,6 +198,19 @@ def record_call(list_id,lead_id):
         return jsonify(error=str(e)),400
 
 
+@app.post('/api/calling/leads/<int:lead_id>/notes')
+def save_call_notes(lead_id):
+    import crm_calling
+    try:
+        p=request.get_json(silent=True)
+        if not isinstance(p,dict): raise ValueError('Add the call notes to save.')
+        return jsonify(crm_calling.save_notes(lead_id,p.get('text'),p.get('version')))
+    except store.Conflict as e:
+        return jsonify(error=str(e)),409
+    except (ValueError,TypeError) as e:
+        return jsonify(error=str(e)),400
+
+
 @app.get('/api/booking/connections')
 def booking_connections():
     import crm_booking

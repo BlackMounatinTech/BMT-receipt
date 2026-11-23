@@ -21,6 +21,20 @@ UTC−7 calendar day and rolls over at midnight. New day resets only today's cou
 using an event marker; the overall count and call history are retained. Each saved
 outcome is counted transactionally, so rejected/stale saves cannot inflate totals.
 
+Call notes autosave after typing pauses and before moving between leads. A Saved
+indicator confirms the server write. Unsaved drafts are also kept per lead in the
+browser, so a reload or failed connection does not silently discard the draft.
+Notes use their own optimistic version and do not increment the cold-call counter.
+Earlier notes recorded with a call outcome remain visible in Calling.
+
+Follow up opens a date field and an explicit Save follow-up & next button. Saved
+dates appear in the Follow-ups navigation tab, including future dates and cold
+leads; due and overdue items are labelled. A follow-up date is a CRM reminder,
+not a Zoom appointment or a Google Calendar event, and sends no email.
+
+Production disk verified in Render November 23, 2026: 1 GB mounted at /var/data.
+crm_call_notes and follow-up dates use the existing bmt_crm.sqlite3 on that disk.
+
 ## Connect the existing Render service
 
 Keep the existing service, disk and credentials. No new paid services are needed by

@@ -23,6 +23,9 @@ def schema(con):
         outcome TEXT NOT NULL, created_at TEXT NOT NULL)''')
     con.execute('''CREATE TABLE IF NOT EXISTS crm_call_day_reset (
         day TEXT PRIMARY KEY, after_event_id INTEGER NOT NULL, reset_at TEXT NOT NULL)''')
+    con.execute('''CREATE TABLE IF NOT EXISTS crm_call_notes (
+        lead_id INTEGER PRIMARY KEY REFERENCES crm_leads(id), text TEXT NOT NULL,
+        version INTEGER NOT NULL, updated_at TEXT NOT NULL)''')
 
 
 def record_event(con, key, lead_id, result, stamp):
@@ -185,9 +188,33 @@ def lists():
 def items(list_id):
     with store.connect() as con:
         schema(con)
-        return [dict(r) for r in con.execute('''SELECT l.*,i.position,i.outcome,i.called_at
+        return [dict(r) for r in con.execute('''SELECT l.*,i.position,i.outcome,i.called_at,
+            COALESCE(n.text,(SELECT SUBSTR(text,INSTR(text,CHAR(10))+1) FROM crm_notes
+                WHERE lead_id=l.id AND text LIKE 'Phone: %' AND INSTR(text,CHAR(10))>0 ORDER BY id DESC LIMIT 1),'') AS call_notes,
+            COALESCE(n.version,0) AS note_version
             FROM crm_call_items i JOIN crm_leads l ON l.id=i.lead_id
+            LEFT JOIN crm_call_notes n ON n.lead_id=l.id
             WHERE i.list_id=? ORDER BY i.position''', (list_id,))]
+
+
+def save_notes(lead_id, text, version):
+    if not isinstance(text,str) or len(text)>10000 or type(version) is not int:
+        raise ValueError('Check the call notes and refresh if needed.')
+    with store.connect() as con:
+        schema(con)
+        con.execute('BEGIN IMMEDIATE')
+        if not con.execute('SELECT 1 FROM crm_leads WHERE id=?',(lead_id,)).fetchone():
+            raise ValueError('Lead not found.')
+        previous=con.execute('SELECT * FROM crm_call_notes WHERE lead_id=?',(lead_id,)).fetchone()
+        current_version=previous['version'] if previous else 0
+        # A retry after a lost response is safe, including a keepalive on navigation.
+        if previous and previous['text']==text:
+            return dict(version=current_version,text=text)
+        if current_version!=version:
+            raise store.Conflict('These call notes changed in another session. Your draft is kept in this browser. Refresh and review before replacing them.')
+        con.execute('INSERT OR REPLACE INTO crm_call_notes VALUES(?,?,?,?)',
+                    (lead_id,text,current_version+1,store.now()))
+        return dict(version=current_version+1,text=text)
 
 
 def outcome(list_id, lead_id, revision, result, note='', follow_up=None):

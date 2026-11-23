@@ -164,5 +164,41 @@ class CallingTests(unittest.TestCase):
         counts=self.client.post('/api/calling/new-day',headers=self.headers).json
         self.assertEqual(counts['total'],1);self.assertEqual(counts['today'],0)
 
+    def test_call_notes_survive_navigation_reload_and_conflicting_edits(self):
+        result=self.upload('Company,Phone\nFirst,2125550100\nSecond,2125550101\n','true').json
+        first=calling.items(result['list_id'])[0]
+        path=f"/api/calling/leads/{first['id']}/notes"
+        response=self.client.post(path,json={'text':'Owner wants a call Friday.','version':0},headers=self.headers)
+        self.assertEqual(response.status_code,200)
+        # Re-reading the queue uses disk data, not the browser's textarea.
+        reread=self.client.get('/api/calling/lists/'+result['list_id']).json['leads']
+        self.assertEqual(reread[0]['call_notes'],'Owner wants a call Friday.')
+        self.assertEqual(reread[1]['call_notes'],'')
+        self.assertEqual(reread[0]['revision'],first['revision'])
+        self.assertEqual(calling.call_counts()['total'],0)
+        retry=self.client.post(path,json={'text':'Owner wants a call Friday.','version':0},headers=self.headers)
+        self.assertEqual(retry.status_code,200)
+        conflict=self.client.post(path,json={'text':'Stale overwrite','version':0},headers=self.headers)
+        self.assertEqual(conflict.status_code,409)
+        self.assertEqual(calling.items(result['list_id'])[0]['call_notes'],'Owner wants a call Friday.')
+        self.assertEqual(self.client.post(path,json={'text':'No CSRF','version':1}).status_code,403)
+
+    def test_follow_up_preserves_notes_and_future_date_without_booking(self):
+        result=self.upload('Company,Phone\nFirst,2125550100\n','true').json
+        lead=calling.items(result['list_id'])[0]
+        calling.save_notes(lead['id'],'Ask for Alex.',0)
+        calling.outcome(result['list_id'],lead['id'],lead['revision'],'Follow up','Ask for Alex.','2030-02-01')
+        saved=calling.items(result['list_id'])[0]
+        self.assertEqual(saved['follow_up'],'2030-02-01');self.assertEqual(saved['call_notes'],'Ask for Alex.')
+        self.assertEqual(saved['stage'],'Cold');self.assertEqual(saved['status'],'Follow-up')
+        self.assertFalse(saved['call_start_utc'])
+        self.assertEqual(self.client.get('/api/booking/jobs').json['jobs'],[])
+
+    def test_previous_call_history_notes_are_visible_in_calling(self):
+        result=self.upload('Company,Phone\nFirst,2125550100\n','true').json
+        lead=calling.items(result['list_id'])[0]
+        calling.outcome(result['list_id'],lead['id'],lead['revision'],'Called','Previously saved note')
+        self.assertEqual(calling.items(result['list_id'])[0]['call_notes'],'Previously saved note')
+
 
 if __name__=='__main__':unittest.main()
