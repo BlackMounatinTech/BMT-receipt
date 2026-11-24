@@ -91,6 +91,14 @@
     const zone=current()&&BMTLeadTime.zoneFor(current());
     const clock=zone&&BMTLeadTime.clock(zone);
     $('#company-clock').textContent=clock?`Their time: ${clock.time} · ${clock.label} vs Vancouver`:'Choose the company’s time zone to show its local time.';
+    const hours=BMTBusinessHours.describe(current()?.business_hours,zone);
+    const status=$('#business-hours-status');status.textContent=hours.text;status.dataset.state=hours.state;
+    $('#business-hours-today').textContent=hours.today||'';
+    $('#business-hours-details').hidden=!hours.week.length;
+    $('#business-hours-week').textContent=hours.week.join('\n');
+    const source=$('#business-hours-source');
+    source.textContent=hours.source?`${hours.source}${hours.checkedAt?' · '+hours.checkedAt.slice(0,10):''}`:'';
+    if(/^https?:\/\//.test(hours.sourceUrl))source.href=hours.sourceUrl;else source.removeAttribute('href');
   }
   $('#company-zone').onchange=async()=>{
     const lead=current(),zone=$('#company-zone').value;
@@ -116,6 +124,8 @@
     $('#call-phone').href = 'tel:'+lead.phone.replace(/[^+\d]/g,'');
     $('#call-contact').textContent = [lead.contact,lead.email].filter(Boolean).join(' · ');
     $('#call-research').textContent = lead.need || 'No research notes yet.';
+    const site=$('#call-website');site.hidden=!/^https?:\/\//.test(lead.website||'');
+    if(!site.hidden)site.href=lead.website;else site.removeAttribute('href');
     displayedLeadId=lead.id;
     const draft=localDraft(lead.id);
     $('#call-note').value=draft?.text ?? lead.call_notes ?? '';

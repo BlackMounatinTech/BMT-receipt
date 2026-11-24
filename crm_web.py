@@ -237,6 +237,21 @@ def save_lead_timezone(lead_id):
     return jsonify(zone=zone)
 
 
+@app.post('/api/calling/leads/<int:lead_id>/research')
+def save_lead_research(lead_id):
+    import crm_research
+    p = request.get_json(silent=True)
+    if not isinstance(p, dict):
+        return jsonify(error='Provide the lead research.'),400
+    try:
+        return jsonify(crm_research.save(lead_id,p.get('revision'),p.get('need'),
+                                        p.get('website',''),p.get('business_hours',{})))
+    except store.Conflict as e:
+        return jsonify(error=str(e)),409
+    except (ValueError,TypeError) as e:
+        return jsonify(error=str(e)),400
+
+
 @app.get('/api/booking/connections')
 def booking_connections():
     import crm_booking
