@@ -46,15 +46,16 @@ def preview(lead, kind='confirmation'):
     zone = lead['call_zone']
     tz = timezone(timedelta(hours=-7)) if zone == 'Vancouver' else ZoneInfo(ZONES[zone])
     when = datetime.fromisoformat(lead['call_start_utc']).astimezone(tz)
-    stamp = when.strftime('%A, %B %-d at %-I:%M %p') + ' (' + zone + ' time)'
+    stamp = when.strftime('%A, %B %-d, %Y at %-I:%M %p') + ' (' + zone + ' time)'
     reminder = kind == 'reminder'
-    subject = ('Reminder: ' if reminder else 'Your BMT call — ') + when.strftime('%b %-d at %-I:%M %p') + ' ' + zone
+    subject = ('Reminder: Your advertising call — ' if reminder else 'Your advertising call — ') + when.strftime('%b %-d at %-I:%M %p') + ' ' + zone
     body = (f"Hi {lead['contact'] or 'there'},\n\n" +
-            ('A quick reminder about our call.\n\n' if reminder else 'Great speaking with you. Here are the details for our call:\n\n') +
-            f"Date and time: {stamp}\nLength: 30 minutes\nZoom link: {lead['zoom_url']}\n\n" +
-            "We’ll discuss your online presence, your project photos, and how BMT can help showcase your work.\n\n" +
-            ('' if lead['confirmed_at'] else 'Please reply “confirmed” so we know you received this.\n\n') +
-            'If you need to change the time, just reply to this email.\n\nMichael\nBlack Mountain Technologies')
+            f"Our call is on {stamp}.\nLength: 30 minutes.\n\n" +
+            "At the time of our meeting, click this Zoom link to join:\n" +
+            f"{lead['zoom_url']}\n\n" +
+            "We’ll discuss advertising for your company.\n\n" +
+            ('' if lead['confirmed_at'] else 'Please reply “confirm” so we know you received this.\n\n') +
+            'If you need to change the time, reply to this email.\n\nMichael\nBlack Mountain Technologies')
     return dict(to=lead['email'],subject=subject,body=body)
 
 def messages_table(con):

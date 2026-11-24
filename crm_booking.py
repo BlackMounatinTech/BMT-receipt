@@ -261,7 +261,7 @@ def create(lead_id, data):
         details = dict(company=lead['company'],contact=contact,email=email,host=host,start=start,
             end=(instant+timedelta(minutes=30)).isoformat(timespec='seconds'),zone=data['zone'],
             date=data['date'],time=data['time'],note=note,list_id=data.get('list_id'),
-            description='A 30-minute call with Black Mountain Technologies to discuss your online presence, project photos and how we can help showcase your work.')
+            description='A 30-minute call with Black Mountain Technologies to discuss advertising for your company.')
         job_id = uuid.uuid4().hex
         con.execute('INSERT INTO crm_booking_jobs(id,lead_id,payload,state,updated_at) VALUES(?,?,?,\'pending\',?)',
                     (job_id,lead_id,json.dumps(details),store.now()))
