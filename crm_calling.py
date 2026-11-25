@@ -189,22 +189,27 @@ def import_list(name, rows, commit=False):
 def lists():
     with store.connect() as con:
         schema(con)
-        return [dict(r) for r in con.execute('''SELECT l.*, COUNT(i.lead_id) AS total,
+        imported_lists = [dict(r) for r in con.execute('''SELECT l.*, COUNT(i.lead_id) AS total,
             SUM(CASE WHEN i.outcome IS NOT NULL THEN 1 ELSE 0 END) AS completed
             FROM crm_call_lists l LEFT JOIN crm_call_items i ON i.list_id=l.id
             GROUP BY l.id ORDER BY l.created_at DESC, l.rowid DESC''')]
+    import crm_schedules
+    return crm_schedules.lists() + imported_lists
 
 
 def items(list_id):
+    import crm_schedules
+    if list_id.startswith('schedule:'):return crm_schedules.items(list_id)
     with store.connect() as con:
         schema(con)
-        return [dict(r) for r in con.execute('''SELECT l.*,i.position,i.outcome,i.called_at,
+        rows = [dict(r) for r in con.execute('''SELECT l.*,i.position,i.outcome,i.called_at,
             COALESCE(n.text,(SELECT SUBSTR(text,INSTR(text,CHAR(10))+1) FROM crm_notes
                 WHERE lead_id=l.id AND text LIKE 'Phone: %' AND INSTR(text,CHAR(10))>0 ORDER BY id DESC LIMIT 1),'') AS call_notes,
             COALESCE(n.version,0) AS note_version
             FROM crm_call_items i JOIN crm_leads l ON l.id=i.lead_id
             LEFT JOIN crm_call_notes n ON n.lead_id=l.id
             WHERE i.list_id=? ORDER BY i.position''', (list_id,))]
+        return crm_schedules.history(con,rows)
 
 
 def save_notes(lead_id, text, version):
@@ -240,6 +245,8 @@ def outcome(list_id, lead_id, revision, result, note='', follow_up=None):
         schema(con)
         con.execute('BEGIN IMMEDIATE')
         row = con.execute('SELECT * FROM crm_leads WHERE id=?', (lead_id,)).fetchone()
+        from crm_schedules import source_list
+        list_id=source_list(con,list_id,lead_id)
         item = con.execute('SELECT * FROM crm_call_items WHERE list_id=? AND lead_id=?',(list_id,lead_id)).fetchone()
         if not row or not item or row['revision'] != revision:
             raise store.Conflict('This lead changed. Refresh before recording the call.')

@@ -73,9 +73,14 @@
     const [data, pending] = await Promise.all([api('/api/calling/lists'),api('/api/booking/jobs')]);
     jobs = pending.jobs;
     const select = $('#call-list'); select.replaceChildren(new Option('Choose a list',''));
-    data.lists.forEach(l => select.add(new Option(`${l.name} · ${l.completed}/${l.total}`,l.id)));
+    for(const [label,scheduled] of [['Calling times',true],['Original imported sheets',false]]){
+      const group=document.createElement('optgroup');group.label=label;
+      data.lists.filter(l=>!!l.scheduled===scheduled).forEach(l=>group.append(new Option(`${scheduled?'':'Original sheet: '}${l.name} · ${l.completed}/${l.total}`,l.id)));
+      select.append(group);
+    }
     if (!data.lists.some(l => l.id===listId)) listId = data.lists[0]?.id || '';
     select.value = listId;
+    $('#call-list-description').textContent=data.lists.find(l=>l.id===listId)?.description||'Original imported sheet. Use a calling-time list above to filter by verified opening hours.';
     if (listId) {
       const oldId = current()?.id || Number(localStorage.getItem('bmt-call-position:'+listId));
       queue = (await api('/api/calling/lists/'+listId)).leads;
@@ -120,6 +125,11 @@
     $('#call-location').textContent = lead.location || 'Location not recorded';
     $('#company-zone').value=BMTLeadTime.zoneFor(lead);updateCompanyClock();
     $('#call-status').textContent = lead.outcome || lead.status;
+    const last=lead.last_called_at||lead.called_at;
+    $('#previous-call-banner').hidden=!last;
+    $('#previous-call-details').textContent=last?`${new Intl.DateTimeFormat('en-US',{timeZone:'Etc/GMT+7',dateStyle:'full',timeStyle:'short'}).format(new Date(last))} · ${lead.last_call_outcome||lead.outcome||'Call logged'} · your time`:'';
+    const homeTime=n=>{const h=Math.floor(n/60)%24,m=n%60;return `${h%12||12}${m?':'+String(m).padStart(2,'0'):''} ${h>=12?'PM':'AM'}`;};
+    $('#call-opening-home').textContent=Number.isFinite(lead.opening_minute)?`Hours in your time: ${homeTime(lead.opening_minute)}–${homeTime(lead.closing_minute)} · ${lead.schedule_date}`:'';
     $('#call-phone').textContent = lead.phone || 'No phone number';
     $('#call-phone').href = 'tel:'+lead.phone.replace(/[^+\d]/g,'');
     $('#call-contact').textContent = [lead.contact,lead.email].filter(Boolean).join(' · ');

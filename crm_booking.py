@@ -267,7 +267,10 @@ def create(lead_id, data):
                     (job_id,lead_id,json.dumps(details),store.now()))
         if details.get('list_id'):
             from crm_calling import schema as calling_schema, record_event
+            from crm_schedules import source_list
             calling_schema(con)
+            details['list_id']=source_list(con,details['list_id'],lead_id)
+            con.execute('UPDATE crm_booking_jobs SET payload=? WHERE id=?',(json.dumps(details),job_id))
             if not con.execute('SELECT 1 FROM crm_call_items WHERE list_id=? AND lead_id=?',(details['list_id'],lead_id)).fetchone():
                 raise ValueError('This lead is not in the selected calling list.')
             record_event(con,f"booking:{details['list_id']}:{lead_id}:{lead['revision']}",lead_id,'Book meeting',store.now())
