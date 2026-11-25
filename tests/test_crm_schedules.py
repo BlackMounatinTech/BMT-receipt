@@ -38,6 +38,11 @@ class ScheduleTests(unittest.TestCase):
         self.assertEqual([r['opening_minute'] for r in sat],[0,360,420])
         self.assertEqual([r['id'] for r in schedule.select('sunday',rows,NOW)],[2])
 
+    def test_24_hour_periods_merge_across_company_local_midnight(self):
+        row=lead(1,'Pacific (US)',{str(i):[[0,1440]] for i in range(7)})
+        result=schedule.select('daytime',[row],NOW)[0]
+        self.assertEqual((result['opening_minute'],result['closing_minute']),(0,1440))
+
     def test_us_daylight_saving_conversion(self):
         row=lead(1,'Eastern',{'2':[[480,1020]]})
         summer=datetime(2026,7,1,18,tzinfo=timezone.utc)

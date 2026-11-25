@@ -61,7 +61,11 @@ def windows(lead,target):
             a=(local_start.astimezone(HOME).date()-target).days*1440+local_start.astimezone(HOME).hour*60+local_start.astimezone(HOME).minute
             b=(local_end.astimezone(HOME).date()-target).days*1440+local_end.astimezone(HOME).hour*60+local_end.astimezone(HOME).minute
             if a<1440 and b>0:result.append((max(0,a),min(1440,b)))
-    return sorted(result)
+    merged=[]
+    for a,b in sorted(result):
+        if merged and a<=merged[-1][1]:merged[-1]=(merged[-1][0],max(merged[-1][1],b))
+        else:merged.append((a,b))
+    return merged
 
 def select(kind,rows,instant=None):
     if kind not in NAMES:raise ValueError('Choose a calling list.')

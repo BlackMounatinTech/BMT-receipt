@@ -129,7 +129,7 @@
     $('#previous-call-banner').hidden=!last;
     $('#previous-call-details').textContent=last?`${new Intl.DateTimeFormat('en-US',{timeZone:'Etc/GMT+7',dateStyle:'full',timeStyle:'short'}).format(new Date(last))} · ${lead.last_call_outcome||lead.outcome||'Call logged'} · your time`:'';
     const homeTime=n=>{const h=Math.floor(n/60)%24,m=n%60;return `${h%12||12}${m?':'+String(m).padStart(2,'0'):''} ${h>=12?'PM':'AM'}`;};
-    $('#call-opening-home').textContent=Number.isFinite(lead.opening_minute)?`Hours in your time: ${homeTime(lead.opening_minute)}–${homeTime(lead.closing_minute)} · ${lead.schedule_date}`:'';
+    $('#call-opening-home').textContent=lead.opening_minute===0&&lead.closing_minute===1440?`Open 24 hours in your time · ${lead.schedule_date}`:Number.isFinite(lead.opening_minute)?`Hours in your time: ${homeTime(lead.opening_minute)}–${homeTime(lead.closing_minute)} · ${lead.schedule_date}`:'';
     $('#call-phone').textContent = lead.phone || 'No phone number';
     $('#call-phone').href = 'tel:'+lead.phone.replace(/[^+\d]/g,'');
     $('#call-contact').textContent = [lead.contact,lead.email].filter(Boolean).join(' · ');
