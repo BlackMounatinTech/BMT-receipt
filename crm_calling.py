@@ -236,8 +236,6 @@ def outcome(list_id, lead_id, revision, result, note='', follow_up=None):
     if result == 'Follow up':
         if follow_up:
             date.fromisoformat(follow_up)
-        elif not note.strip():
-            raise ValueError('Add a note for an undated follow-up, or choose a date.')
     with store.connect() as con:
         schema(con)
         con.execute('BEGIN IMMEDIATE')

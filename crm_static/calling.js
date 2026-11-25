@@ -136,7 +136,7 @@
     $('#call-followup').value=lead.follow_up||'';
     $('#call-followup-date').textContent=lead.follow_up?'Follow up on '+lead.follow_up:lead.status==='Follow-up'?'Follow-up · No date set':'';
     const job = jobFor(lead), locked = !!job || ['Won','Lost','Call booked'].includes(lead.status);
-    document.querySelectorAll('[data-outcome],#call-followup-button,#call-book').forEach(b=>b.disabled=locked);
+    document.querySelectorAll('[data-outcome],#call-followup-button,#call-book,#clear-call-followup,#save-call-followup,#call-followup').forEach(b=>b.disabled=locked);
     $('#call-job-state').textContent = job ? job.state==='complete' ? 'Meeting booked · confirmation sent.' : job.error || 'Booking in progress. Open it to review the next step.' : '';
     $('#resume-booking').hidden = !job; $('#resume-booking').textContent = job?.state==='complete' ? 'View booking' : 'Review booking';
     error('call-error','');
@@ -156,7 +156,7 @@
   $('#call-details').onclick=()=>openLead(leads.find(l=>l.id===current().id)||current());
   async function record(outcome) {
     if(callBusy || !current())return;
-    callBusy=true;document.querySelectorAll('.call-outcomes button').forEach(b=>b.disabled=true);$('#call-note').disabled=true;
+    callBusy=true;document.querySelectorAll('.call-outcomes button,#clear-call-followup,#save-call-followup,#call-followup').forEach(b=>b.disabled=true);$('#call-note').disabled=true;
     const lead=current();
     try {
       await flushNotes();
@@ -169,11 +169,12 @@
   $('#call-followup-button').onclick=()=>{
     $('#followup-date-label').hidden=false;$('#call-followup').focus();
   };
-  $('#clear-call-followup').onclick=()=>{$('#call-followup').value='';$('#call-note').focus();};
-  $('#save-call-followup').onclick=()=>{
-    if(!$('#call-followup').value&&!$('#call-note').value.trim()){error('call-error','Add a note for an undated follow-up, or choose a date.');$('#call-note').focus();return;}
+  $('#clear-call-followup').onclick=()=>{
+    if(callBusy)return;
+    $('#call-followup').value='';
     record('Follow up');
   };
+  $('#save-call-followup').onclick=()=>record('Follow up');
   $('#nav-calling').onclick=()=>{if(location.hash==='#calling')route();else location.hash='calling';};
   async function route() {
     const target=location.hash.slice(1);
