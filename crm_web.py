@@ -298,5 +298,37 @@ def abandon_booking(job_id):
         return jsonify(error=str(e)),400
 
 
+@app.get('/api/stats')
+def stats_report():
+    import crm_stats
+    from datetime import datetime, timedelta
+    day = datetime.now(crm_stats.LOCAL).date()
+    try:
+        return jsonify(crm_stats.report(request.args.get('start',(day-timedelta(days=29)).isoformat()), request.args.get('end',day.isoformat())))
+    except ValueError as e:
+        return jsonify(error=str(e)),400
+
+@app.route('/api/stats/outreach', methods=['GET','POST'])
+def stats_outreach():
+    import crm_stats
+    try:
+        if request.method=='GET':
+            return jsonify(crm_stats.outreach_row(request.args.get('day'),request.args.get('channel')))
+        p=request.get_json(silent=True)
+        if not isinstance(p,dict): raise ValueError('Check your outreach entry.')
+        return jsonify(crm_stats.save_outreach(p))
+    except store.Conflict as e: return jsonify(error=str(e)),409
+    except ValueError as e: return jsonify(error=str(e)),400
+
+@app.post('/api/stats/discovery')
+def stats_discovery():
+    import crm_stats
+    try:
+        p=request.get_json(silent=True)
+        if not isinstance(p,dict): raise ValueError('Check your discovery entry.')
+        return jsonify(crm_stats.save_discovery(p))
+    except store.Conflict as e: return jsonify(error=str(e)),409
+    except ValueError as e: return jsonify(error=str(e)),400
+
 if __name__ == '__main__':
-    app.run(host='127.0.0.1', port=8518)
+    app.run(host='127.0.0.1', port=int(os.environ.get('PORT', 5056)))

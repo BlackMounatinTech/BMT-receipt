@@ -179,6 +179,9 @@ def update_lead(lead_id, revision, *, company, contact, phone, email, need, stat
         if booking_changed:
             con.execute('''UPDATE crm_leads SET booking_version=booking_version+1,
                 confirmation_sent_at=NULL,confirmed_at=NULL,reminder_sent_at=NULL,booked_at=? WHERE id=?''', (now() if start else None,lead_id))
+        if status == 'Call booked' and start:
+            from crm_stats import record_booking
+            record_booking(con, lead_id, previous['booked_at'] or now())
         if note.strip():
             con.execute('INSERT INTO crm_notes (lead_id,author,text,created_at) VALUES (?,?,?,?)',
                         (lead_id,author,note.strip(),now()))

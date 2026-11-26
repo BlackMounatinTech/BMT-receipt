@@ -316,6 +316,8 @@ def resume(job_id, provider=None, sender=None):
                 con.execute('INSERT INTO crm_notes(lead_id,author,text,created_at) VALUES(?,?,?,?)',
                     (job['lead_id'],'Michael','Meeting booked with '+details['host']['name']+
                      ('\n'+details['note'] if details['note'] else ''),store.now()))
+            from crm_stats import record_booking
+            record_booking(con, job['lead_id'], lead['booked_at'] or store.now())
             version = con.execute('SELECT booking_version FROM crm_leads WHERE id=?',(job['lead_id'],)).fetchone()[0]
             if details.get('list_id'):
                 from crm_calling import schema as calling_schema

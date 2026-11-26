@@ -4,7 +4,7 @@
   let callBusy = false, importReady = false, connections = null, jobs = [], currentJob = null, bookingLead = null;
   const current = () => queue[position];
   const error = (id, message) => { $('#'+id).textContent = message || ''; $('#'+id).hidden = !message; };
-  const pages = ['calling','booking','leads','calendar'];
+  const pages = ['calling','booking','leads','calendar','stats'];
   let noteTimer=null, noteWrites=Promise.resolve(), displayedLeadId=null;
   const noteKey=id=>'bmt-call-notes:'+id;
   function localDraft(id){try{return JSON.parse(localStorage.getItem(noteKey(id))||'null');}catch{return null;}}
@@ -193,7 +193,7 @@
       page('calling');try{await refreshLists();}catch(e){error('call-error',e.message);}
     } else if(target==='booking' && bookingLead) page('booking');
     else if(target==='booking'){location.hash='calling';}
-    else {$('#calling-page').hidden=true;$('#booking-page').hidden=true;$('#nav-calling').classList.remove('active');showPage(['outreach','customers','calendar','followups'].includes(target)?target:'prospects');}
+    else {$('#calling-page').hidden=true;$('#booking-page').hidden=true;$('#nav-calling').classList.remove('active');showPage(['outreach','customers','calendar','followups','stats'].includes(target)?target:'prospects');}
   }
   window.addEventListener('hashchange',route);
 
