@@ -42,7 +42,7 @@ def tick():
                     try:process.wait(timeout=10)
                     except subprocess.TimeoutExpired:os.killpg(process.pid,signal.SIGKILL);process.wait()
                     summary='Run reached its time limit; review any unconfirmed send before continuing.'
-                if (folder/'summary.txt').exists():summary=(folder/'summary.txt').read_text()[-3500:]
+                if (folder/'summary.txt').exists():summary=(folder/'summary.txt').read_text().strip()[-3500:] or summary
                 if process.returncode and summary=='Run ended without a summary.':summary='Worker exited with an error; local run log saved.'
         except Exception as e:summary='Worker stopped: '+str(e)
         if 'process' in locals() and process.returncode:
