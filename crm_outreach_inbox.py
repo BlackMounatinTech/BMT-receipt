@@ -51,10 +51,11 @@ def snapshot(operator=False):
                         timeline.append(dict(id='note:'+str(n['id']),direction='outbound',text=text,at=lead['last_contacted_at'] or n['created_at'],state='sent',classification='Introduction',source_url=''))
             timeline.sort(key=lambda m:instant(m['at']))
             latest=timeline[-1] if timeline else None
-            state='Needs reply' if needs_reply else 'Waiting on them'
+            booked=lead['status']=='Call booked' or any(p['conversation_stage']=='Booked' for p in linked)
+            state='Meeting booked' if booked else 'Waiting on them'
+            if needs_reply:state='Needs reply'
             if uncertain:state='Needs review'
             if stopped or lead['status'] in ('Won','Lost'):state='Closed'
-            elif lead['status']=='Call booked' or any(p['conversation_stage']=='Booked' for p in linked):state='Meeting booked'
             if not timeline and not lead['last_contacted_at']:state='Date not recorded'
             rows.append(dict(lead,conversation_state=state,new_reply=newest_inbound>seen.get(lead['id'],0),
                 inbound_sequence=newest_inbound,last_checked_at=last_check or None,
@@ -112,8 +113,9 @@ def record_check(con,p):
         machine.intelligence.reject_outbound_echo(con,row,text)
         result=machine.intelligence.inbound(con,dict(item,text=text,source_url=source),row)
         added+=not result.get('duplicate',False)
-        if not result.get('duplicate') and item['classification'] in ('Interested','Booking requested'):
+        if not result.get('duplicate') and row['state']!='stopped' and row['conversation_stage']!='Not interested' and item['classification'] in ('Interested','Booking requested'):
             con.execute("UPDATE crm_leads SET stage='Prospect',status=CASE WHEN status IN ('New','Contacted') THEN 'Follow-up' ELSE status END,updated_at=?,revision=revision+1 WHERE id=? AND status NOT IN ('Won','Lost')",(store.now(),lead['id']))
         if item['classification']=='Not interested':con.execute("UPDATE crm_ai_prospects SET state='stopped',stop_reason='Not interested / do not contact again' WHERE id=?",(row['id'],))
+        row=con.execute('SELECT * FROM crm_ai_prospects WHERE id=?',(row['id'],)).fetchone()
     con.execute('UPDATE crm_ai_prospects SET last_thread_check=? WHERE id=?',(store.now(),row['id']))
     return dict(ok=True,new_replies=added)

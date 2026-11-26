@@ -65,6 +65,7 @@ def outreach_read(n):
     import crm_outreach_inbox
     try:
         p=request.get_json(silent=True) or {}
+        if not isinstance(p,dict):raise ValueError('Provide the displayed reply sequence.')
         crm_outreach_inbox.mark_read(n,p.get('sequence'))
         return jsonify(ok=True)
     except (ValueError,TypeError) as e:return jsonify(error=str(e)),400

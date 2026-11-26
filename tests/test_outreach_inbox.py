@@ -53,3 +53,32 @@ class InboxTests(unittest.TestCase):
         row=inbox.snapshot()['conversations'][0]
         self.assertEqual(row['conversation_state'],'Meeting booked');self.assertTrue(row['conversation'])
 
+    def test_booked_customer_question_still_needs_reply_and_check_stays_read_only(self):
+        n=store.add_lead('Demo',phone='5555550100',stage='Outreach',contact_method='Facebook DM',last_contacted_at='2026-11-24')
+        self.post({'op':'request-inbox-check'});run=self.post({'op':'claim'}).json['run']
+        p=dict(op='inbox-check-result',run_id=run,lead_id=n,channel='Facebook',source_url='https://www.facebook.com/demo',proof='Read the correct live conversation.',messages=[dict(text='What should I bring to our meeting?',classification='Question',external_key='1')])
+        self.post(p)
+        with store.connect() as con:con.execute("UPDATE crm_leads SET status='Call booked' WHERE id=?",(n,))
+        self.assertEqual(inbox.snapshot()['conversations'][0]['conversation_state'],'Needs reply')
+        self.assertEqual(self.post({'op':'settings','enabled':True},ok=False).status_code,400)
+        self.assertFalse(machine.snapshot()['config']['enabled'])
+        self.assertEqual(self.client.post(f'/api/outreach-inbox/{n}/read',json=['invalid'],headers=self.csrf).status_code,400)
+
+    def test_optout_is_not_reopened_by_later_batch_message(self):
+        n=store.add_lead('Demo',phone='5555550100',stage='Outreach',contact_method='Facebook DM',last_contacted_at='2026-11-24')
+        self.post({'op':'request-inbox-check'});run=self.post({'op':'claim'}).json['run']
+        p=dict(op='inbox-check-result',run_id=run,lead_id=n,channel='Facebook',source_url='https://www.facebook.com/demo',proof='Read the correct live conversation.',messages=[dict(text='Do not contact me again.',classification='Not interested',external_key='1'),dict(text='Old question from earlier',classification='Interested',external_key='2')])
+        self.post(p)
+        with store.connect() as con:
+            prospect=con.execute('SELECT * FROM crm_ai_prospects WHERE lead_id=?',(n,)).fetchone()
+            self.assertEqual(prospect['state'],'stopped');self.assertEqual(prospect['conversation_stage'],'Not interested')
+        self.assertEqual(store.list_leads()[0]['stage'],'Outreach')
+        self.assertEqual(inbox.snapshot()['conversations'][0]['conversation_state'],'Closed')
+
+    def test_manual_check_request_retry_does_not_queue_a_second_run(self):
+        self.post({'op':'request-inbox-check'})
+        run=self.post({'op':'claim'}).json['run']
+        retry=self.post({'op':'request-inbox-check'}).json
+        self.assertTrue(retry['running']);self.assertFalse(retry['queued'])
+        self.post({'op':'finish','run_id':run,'summary':'Read-only test completed.'})
+        self.assertIsNone(self.post({'op':'claim'}).json['run'])

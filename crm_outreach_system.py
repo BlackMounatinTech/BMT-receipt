@@ -237,6 +237,8 @@ def action(p,owner=False):
         if op=='settings':
             cfg=config(con);enabled=p.get('enabled',bool(cfg['enabled']));cap=p.get('daily_cap',cfg['daily_cap']);channels=p.get('channels',json.loads(cfg['channels']))
             if type(enabled)is not bool or type(cap)is not int or not 1<=cap<=100 or not isinstance(channels,list) or not channels or set(channels)-set(CHANNELS):raise ValueError('Check run settings.')
+            if enabled and not owner and con.execute("SELECT 1 FROM crm_ai_runs WHERE state='running' AND mode='check'").fetchone():
+                raise ValueError('A read-only inbox check cannot enable scheduled outreach.')
             if enabled and not cfg['enabled']:
                 uncertain=con.execute("SELECT 1 FROM crm_ai_prospects WHERE state IN ('sending','unconfirmed','blocked')").fetchone() or con.execute("SELECT 1 FROM crm_ai_messages WHERE direction='outbound' AND state IN ('sending','unconfirmed','blocked')").fetchone()
                 if uncertain:raise ValueError('Review the uncertain message delivery before resuming outreach; do not resend automatically.')
@@ -252,6 +254,8 @@ def action(p,owner=False):
             return dict(ok=True)
         if op=='request-inbox-check':
             cfg=config(con)
+            if con.execute("SELECT 1 FROM crm_ai_runs WHERE state='running' AND mode='check'").fetchone():
+                return dict(ok=True,queued=False,running=True)
             con.execute('UPDATE crm_ai_config SET manual_check=1 WHERE id=1')
             return dict(ok=True,queued=True,worker_connected=bool(cfg['heartbeat'] and instant()-datetime.fromisoformat(cfg['heartbeat'])<timedelta(minutes=3)))
         if op=='inbox-check-result':
