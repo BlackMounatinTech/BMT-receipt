@@ -279,18 +279,20 @@ def action(p,owner=False):
             if classification not in ('Interested','Booking requested','Question','Not interested','Auto-reply','Other'):raise ValueError('Choose a reply classification.')
             text=short(p,'text',10000);source=url(p.get('source_url'),'conversation link');draft=short(p,'suggested_reply',3000,False)
             intelligence.reject_outbound_echo(con,row,text)
+            result=intelligence.inbound(con,p,row)
+            if result.get('duplicate'):return dict(ok=True,message_id=result['id'],state=result['state'],duplicate=True)
             ident=hashlib.sha256((row['id']+'\n'+text).encode()).hexdigest()
-            result=con.execute('INSERT OR IGNORE INTO crm_ai_replies VALUES(?,?,?,?,?,?,?)',(ident,row['id'],stamp(),text,classification,source,draft))
-            if result.rowcount and row['lead_id']:
+            con.execute('INSERT OR IGNORE INTO crm_ai_replies VALUES(?,?,?,?,?,?,?)',(ident,row['id'],stamp(),text,classification,source,draft))
+            if row['lead_id']:
                 con.execute('INSERT INTO crm_notes(lead_id,author,text,created_at) VALUES(?,?,?,?)',(row['lead_id'],'Michael','Outreach reply ('+classification+')\n'+source+'\n'+text,stamp()))
                 if classification in ('Interested','Booking requested'):
                     con.execute("UPDATE crm_leads SET stage='Prospect',status=CASE WHEN status IN ('New','Contacted') THEN 'Follow-up' ELSE status END,updated_at=?,revision=revision+1 WHERE id=? AND status NOT IN ('Won','Lost')",(stamp(),row['lead_id']))
             if classification=='Not interested':con.execute("UPDATE crm_ai_prospects SET state='stopped',stop_reason='Not interested / do not contact again' WHERE id=?",(row['id'],))
-            result=intelligence.inbound(con,p,row)
             return dict(ok=True,message_id=result['id'],state=result['state'])
         if op=='skip':
             con.execute("UPDATE crm_ai_prospects SET state='stopped',stop_reason='Skipped by Michael' WHERE id=? AND state='ready'",(p.get('id'),));return dict(ok=True)
         if op=='control-link':
+            if not owner:raise ValueError('Owner-access links can only be created from an existing owner session. Worker credentials cannot grant owner access.')
             token=secrets.token_urlsafe(32);con.execute('INSERT INTO crm_ai_control_links VALUES(?,?)',(hashlib.sha256(token.encode()).hexdigest(),(instant()+timedelta(minutes=15)).isoformat()))
             return dict(path='/outreach-connect/'+token)
         raise ValueError('Unknown outreach action.')

@@ -73,3 +73,8 @@ Read health.channels and health.alerts at the start of every run. If the current
 DELIVERY AND HANDOFF GUARDS
 Only ONE outbound attempt can be in flight globally (intro or reply). Record its verified result before requesting the next send; the two-new-contact rolling30minute cap still applies. Never treat an original introduction or any later sent reply as inbound; exact or whitespace-normalized echoes are rejected. If a real inbound quotes our text, distinguish the sender and record their actual added words, not our own message. Ambiguous verbatim echoes need human review, not an automatic reply.
 Human needed is an owner-controlled hold. Reassessment cannot clear it, even after a new message. Michael resolves it from the connected CRM browser using Resolve human handoff; workers cannot release it or use an outcome/assessment to bypass it. Booked/Closed cannot be downgraded by ordinary reassessment; log actual outcomes or escalate a booking change. Historical conversation imports are tracked separately and never count as new automatic introductions.
+
+
+EVENT INTEGRITY
+Keep each platform message ID tied to its actual observed text and classification. If an ID conflicts, stop that update and record a human-review note; do not invent a new ID to force it through. Old/replayed outcomes cannot reopen closed conversations or clear opt-outs. Older historical outcomes may be recorded without replacing a newer state.
+Rate-limit cooldowns are enforced on the server; Check next run or readable history cannot shorten them. Wait until the recorded deadline, then verify the platform again. Never request an owner-access link or try to acquire owner authority from worker credentials; owner session recovery is an administrator task outside this workflow.

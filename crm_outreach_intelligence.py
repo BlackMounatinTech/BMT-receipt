@@ -4,7 +4,7 @@ import json
 import re
 import secrets
 import unicodedata
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from urllib.parse import urlparse
 
 STATE_NAMES=dict(zip(
@@ -144,6 +144,11 @@ def pending(con,pid=None):
 def inbound(con,p,row):
     api=m();key=api.short(p,'external_key',1000,False) or hashlib.sha256((p['text']+'\n'+p['source_url']).encode()).hexdigest()
     ident=hashlib.sha256((row['id']+'\ninbound\n'+key).encode()).hexdigest()
+    existing=con.execute('SELECT * FROM crm_ai_messages WHERE id=?',(ident,)).fetchone()
+    if existing:
+        if normalized_message(existing['text'])!=normalized_message(p['text']) or existing['classification']!=p['classification']:
+            raise ValueError('This platform message ID is already saved with different content/classification. Review the conflict; do not alter CRM status.')
+        return dict(id=ident,state=existing['state'],duplicate=True)
     classification=p['classification'];state='ignored' if classification in ('Auto-reply','Not interested') else 'received'
     inserted=con.execute('INSERT OR IGNORE INTO crm_ai_messages(id,prospect_id,external_key,direction,text,observed_at,source_url,classification,state) VALUES(?,?,?,\'inbound\',?,?,?,?,?)',(ident,row['id'],key,p['text'],api.stamp(),p['source_url'],classification,state))
     if not inserted.rowcount:
@@ -271,13 +276,19 @@ def dispatch(con,p,owner=False):
         if outcome not in ('Booked','Held','Closed','Lost','No-show'):raise ValueError('Choose an observed meeting or sales outcome.')
         proof=evidence(p.get('proof'),'actual outcome');occurred=api.short(p,'occurred_at',100)
         parsed=datetime.fromisoformat(occurred.replace('Z','+00:00'))
-        if not parsed.tzinfo or parsed>api.instant()+timedelta(minutes=2):raise ValueError('Use the actual observed outcome date.')
+        if not parsed.tzinfo or parsed>api.instant()+timedelta(minutes=2) or (row['sent_at'] and parsed<datetime.fromisoformat(row['sent_at'].replace('Z','+00:00'))):raise ValueError('Use the actual outcome date after this conversation began.')
+        occurred=parsed.astimezone(timezone.utc).isoformat(timespec='seconds')
         if outcome=='Booked':
             booking=con.execute("SELECT 1 FROM crm_stats_bookings WHERE lead_id=? AND created_at>=?",(row['lead_id'],row['sent_at'])).fetchone() if row['lead_id'] else None
             if not booking:raise ValueError('Book through the actual CRM calendar flow first; an agreed time is not a booking.')
-        con.execute('INSERT OR IGNORE INTO crm_ai_outcomes VALUES(?,?,?,?,?)',(secrets.token_hex(16),row['id'],outcome,occurred,proof))
-        if outcome in ('Closed','Lost') or (outcome=='Booked' and row['conversation_stage']!='Human needed'):con.execute('UPDATE crm_ai_prospects SET conversation_stage=? WHERE id=?',('Closed' if outcome in ('Closed','Lost') else 'Booked',row['id']))
-        return dict(ok=True)
+        existing=con.execute('SELECT 1 FROM crm_ai_outcomes WHERE prospect_id=? AND outcome=?',(row['id'],outcome)).fetchone()
+        if existing:return dict(ok=True,duplicate=True)
+        if outcome=='Booked' and (row['state']=='stopped' or row['conversation_stage'] in ('Closed','Not interested')):raise ValueError('A booking event cannot reopen a closed or opted-out conversation.')
+        latest=max((datetime.fromisoformat(r['occurred_at'].replace('Z','+00:00')) for r in con.execute('SELECT occurred_at FROM crm_ai_outcomes WHERE prospect_id=?',(row['id'],))),default=None)
+        current=latest is None or parsed>=latest
+        con.execute('INSERT INTO crm_ai_outcomes VALUES(?,?,?,?,?)',(secrets.token_hex(16),row['id'],outcome,occurred,proof))
+        if current and row['state']!='stopped' and row['conversation_stage']!='Not interested' and (outcome in ('Closed','Lost') or (outcome=='Booked' and row['conversation_stage']!='Human needed')):con.execute('UPDATE crm_ai_prospects SET conversation_stage=? WHERE id=?',('Closed' if outcome in ('Closed','Lost') else 'Booked',row['id']))
+        return dict(ok=True,historical=not current)
     return None
 
 def reconcile(con):

@@ -25,6 +25,9 @@ class OutreachSystemTests(unittest.TestCase):
         r=self.client.post('/api/outreach-system',json=p,headers=self.headers)
         if ok:self.assertEqual(r.status_code,200,r.json)
         return r
+    def owner_session(self):
+        with self.client.session_transaction() as session:session['outreach_operator']=True
+
     def claim(self):
         self.post({'op':'settings','enabled':True})
         run=self.post({'op':'claim'}).json['run']
@@ -57,6 +60,7 @@ class OutreachSystemTests(unittest.TestCase):
     def test_operator_controls_and_single_use_connection(self):
         self.assertEqual(self.client.post('/api/outreach-system',json={'op':'settings','enabled':True},headers=self.csrf).status_code,403)
         self.assertEqual(self.client.post('/api/outreach-system',json={'op':'claim'},headers={'X-BMT-Outreach-Key':'test-key'}).status_code,403)
+        self.owner_session()
         path=self.post({'op':'control-link'}).json['path']
         self.assertEqual(self.client.get(path).status_code,302)
         self.assertEqual(self.client.get(path).status_code,403)
@@ -474,6 +478,7 @@ class OutreachSystemTests(unittest.TestCase):
         run,ident=self.sent_company();self.post(self.assessment_payload(run,ident,'Human needed'))
         p={'op':'release-handoff','id':ident,'proof':'Michael has reviewed the complaint and resolved the outstanding question.'}
         self.assertEqual(self.post({**p,'owner':True},False).status_code,400)
+        self.owner_session()
         path=self.post({'op':'control-link'}).json['path'];self.client.get(path)
         self.post(p)
         d=self.client.get('/api/outreach-system').json
@@ -486,6 +491,7 @@ class OutreachSystemTests(unittest.TestCase):
         with store.connect() as con:con.execute('INSERT INTO crm_stats_bookings VALUES(?,?)',(lead,store.now()))
         self.post({'op':'outcome','id':ident,'run_id':run,'outcome':'Booked','occurred_at':store.now(),'proof':'Actual isolated CRM booking exists, but the complaint is still unresolved.'})
         self.assertEqual(self.client.get('/api/outreach-system').json['prospects'][0]['conversation_stage'],'Human needed')
+        self.owner_session()
         path=self.post({'op':'control-link'}).json['path'];self.client.get(path)
         self.post({'op':'release-handoff','id':ident,'proof':'Michael resolved the question while preserving the existing calendar booking.'})
         self.assertEqual(self.client.get('/api/outreach-system').json['prospects'][0]['conversation_stage'],'Booked')
@@ -499,3 +505,72 @@ class OutreachSystemTests(unittest.TestCase):
         self.assertFalse(d['prospects'][0]['automatic_intro'])
         self.assertEqual(d['intelligence']['funnel']['segments'][0]['sent'],0)
         self.assertEqual(d['intelligence']['funnel']['segments'][0]['imported'],1)
+
+    def test_replayed_booking_cannot_reopen_lost_conversation(self):
+        run,ident=self.sent_company();lead=self.client.get('/api/outreach-system').json['prospects'][0]['lead_id']
+        with store.connect() as con:con.execute('INSERT INTO crm_stats_bookings VALUES(?,?)',(lead,store.now()))
+        p={'op':'outcome','run_id':run,'id':ident,'occurred_at':store.now(),'proof':'Actual outcome verified from the isolated company booking record.'}
+        self.post({**p,'outcome':'Booked'});self.post({**p,'outcome':'Lost'})
+        self.assertTrue(self.post({**p,'outcome':'Booked'}).json['duplicate'])
+        self.assertEqual(self.client.get('/api/outreach-system').json['prospects'][0]['conversation_stage'],'Closed')
+        with store.connect() as con:con.execute("DELETE FROM crm_ai_outcomes WHERE prospect_id=? AND outcome='Booked'",(ident,))
+        self.assertEqual(self.post({**p,'outcome':'Booked'},False).status_code,400)
+
+    def test_older_outcome_is_recorded_without_overwriting_newer_state(self):
+        run,ident=self.sent_company();lead=self.client.get('/api/outreach-system').json['prospects'][0]['lead_id']
+        with store.connect() as con:
+            con.execute('UPDATE crm_ai_prospects SET sent_at=? WHERE id=?',((machine.instant()-timedelta(days=3)).isoformat(),ident))
+            con.execute('INSERT INTO crm_stats_bookings VALUES(?,?)',(lead,store.now()))
+        p={'op':'outcome','run_id':run,'id':ident,'proof':'Observed historical meeting outcome with its actual recorded date.'}
+        self.post({**p,'outcome':'Booked','occurred_at':store.now()})
+        result=self.post({**p,'outcome':'Lost','occurred_at':(machine.instant()-timedelta(days=1)).isoformat()}).json
+        self.assertTrue(result['historical'])
+        self.assertEqual(self.client.get('/api/outreach-system').json['prospects'][0]['conversation_stage'],'Booked')
+        self.assertEqual(self.post({**p,'outcome':'Held','occurred_at':(machine.instant()-timedelta(days=4)).isoformat()},False).status_code,400)
+
+    def test_conflicting_platform_id_does_not_mutate_message_or_company(self):
+        run,ident=self.sent_company();self.inbound(ident,'Can we discuss the driveway campaign?','stable-id','Interested')
+        before=self.client.get('/api/outreach-system').json
+        note_count=len(store.notes_for(before['prospects'][0]['lead_id']))
+        p={'op':'reply','id':ident,'external_key':'stable-id','text':'Stop contacting me.','classification':'Not interested','source_url':'https://www.facebook.com/messages/t/123','suggested_reply':''}
+        self.assertEqual(self.post(p,False).status_code,400)
+        after=self.client.get('/api/outreach-system').json
+        self.assertEqual(len(after['intelligence']['messages']),1)
+        self.assertEqual(after['prospects'][0]['state'],before['prospects'][0]['state'])
+        self.assertEqual(after['prospects'][0]['conversation_stage'],before['prospects'][0]['conversation_stage'])
+        self.assertEqual(len(store.notes_for(after['prospects'][0]['lead_id'])),note_count)
+
+    def test_duplicate_inbound_does_not_repeat_crm_note_or_revision(self):
+        run,ident=self.sent_company();self.inbound(ident)
+        lead=self.client.get('/api/outreach-system').json['prospects'][0]['lead_id']
+        before=store.list_leads()[0];notes=len(store.notes_for(lead))
+        self.inbound(ident)
+        self.assertEqual(len(store.notes_for(lead)),notes)
+        self.assertEqual(store.list_leads()[0]['revision'],before['revision'])
+
+    def test_rate_limit_cannot_be_cleared_by_healthy_history_or_retry(self):
+        run=self.claim();self.block_facebook(run,'rate_limit',False)
+        p={'op':'channel-ready','run_id':run,'channel':'Facebook','proof':'The account is signed in and history is readable, but the send cooldown remains.'}
+        self.assertEqual(self.post(p,False).status_code,400)
+        self.post({'op':'retry-channel','channel':'Facebook'})
+        self.assertEqual(self.post(p,False).status_code,400)
+        d=self.client.get('/api/outreach-system').json
+        fb=next(c for c in d['health']['channels'] if c['channel']=='Facebook')
+        self.assertEqual(fb['next_check'],fb['rate_limited_until'])
+        with store.connect() as con:con.execute('UPDATE crm_ai_channel_health SET rate_limited_until=? WHERE channel=?',((machine.instant()-timedelta(seconds=1)).isoformat(),'Facebook'))
+        self.post(p)
+
+    def test_worker_cannot_mint_owner_session_to_release_handoff(self):
+        run,ident=self.sent_company();self.post(self.assessment_payload(run,ident,'Human needed'))
+        self.assertEqual(self.post({'op':'control-link','owner':True},False).status_code,400)
+        self.assertEqual(self.post({'op':'release-handoff','id':ident,'owner':True,'proof':'The worker must not be able to claim that it is the owner.'},False).status_code,400)
+        self.assertEqual(self.client.get('/api/outreach-system').json['prospects'][0]['conversation_stage'],'Human needed')
+        self.owner_session();path=self.post({'op':'control-link'}).json['path']
+        self.assertEqual(self.client.get(path).status_code,302)
+
+    def test_sales_outcome_does_not_hide_an_existing_opt_out(self):
+        run,ident=self.sent_company();self.inbound(ident,'Stop contacting us.','optout-1','Not interested')
+        self.post({'op':'outcome','run_id':run,'id':ident,'outcome':'Lost','occurred_at':store.now(),'proof':'The company declined and explicitly asked not to receive more messages.'})
+        d=self.client.get('/api/outreach-system').json
+        self.assertEqual(d['prospects'][0]['state'],'stopped')
+        self.assertEqual(d['prospects'][0]['conversation_stage'],'Not interested')

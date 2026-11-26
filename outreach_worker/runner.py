@@ -13,6 +13,23 @@ from client import request
 ROOT=Path(__file__).resolve().parent
 LOCAL=Path.home()/'.config/bmt-outreach-system'
 
+def maintain_run(process,prompt,timeout=1100,heartbeat_seconds=60):
+    """Keep liveness current while communicate waits for the AI/browser child."""
+    deadline=time.monotonic()+timeout
+    payload=prompt.encode()
+    while True:
+        remaining=deadline-time.monotonic()
+        if remaining<=0:raise subprocess.TimeoutExpired(process.args,timeout)
+        try:
+            process.communicate(payload,timeout=min(heartbeat_seconds,remaining))
+            return
+        except subprocess.TimeoutExpired:
+            payload=None
+            if time.monotonic()>=deadline:raise
+            try:request('POST',{'op':'heartbeat','state':'AI worker active: checking replies and researching'})
+            except Exception as error:print('Outreach run heartbeat failed: '+str(error),file=sys.stderr,flush=True)
+
+
 def tick():
     LOCAL.mkdir(parents=True,exist_ok=True)
     with (LOCAL/'run.lock').open('w') as lock:
@@ -36,7 +53,7 @@ def tick():
             with (folder/'events.jsonl').open('w') as log:
                 os.chmod(folder/'events.jsonl',0o600)
                 process=subprocess.Popen(command,stdin=subprocess.PIPE,stdout=log,stderr=subprocess.STDOUT,start_new_session=True)
-                try:process.communicate(prompt.encode(),timeout=1100)
+                try:maintain_run(process,prompt)
                 except subprocess.TimeoutExpired:
                     os.killpg(process.pid,signal.SIGTERM)
                     try:process.wait(timeout=10)

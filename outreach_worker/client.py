@@ -30,7 +30,7 @@ if __name__=='__main__':
         if len(sys.argv)==1 or sys.argv[1]=='get':result=request()
         elif sys.argv[1]=='post':result=request('POST',json.loads(Path(sys.argv[2]).read_text()))
         elif sys.argv[1]=='connect-link':
-            result=request('POST',{'op':'control-link'});result={'url':json.loads(CONFIG.read_text())['base_url']+result['path']}
+            raise ValueError('Worker credentials cannot create owner-access links. Use an existing owner browser session or authenticated Render administrator recovery.')
         else:raise ValueError('Use get, post FILE, or connect-link.')
         print(json.dumps(result,ensure_ascii=False))
     except Exception as e:

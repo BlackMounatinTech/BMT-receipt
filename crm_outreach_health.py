@@ -14,7 +14,11 @@ def schema(con):
     con.execute('''CREATE TABLE IF NOT EXISTS crm_ai_alerts(id TEXT PRIMARY KEY,scope TEXT NOT NULL,kind TEXT NOT NULL,
       severity TEXT NOT NULL,reason TEXT NOT NULL,action TEXT NOT NULL,opened_at TEXT NOT NULL,updated_at TEXT NOT NULL,
       resolved_at TEXT NOT NULL DEFAULT '')''')
-    for c in api().CHANNELS:con.execute("INSERT OR IGNORE INTO crm_ai_channel_health VALUES(?,'unknown','','Not checked yet','The next run will check this connection.','','','',0)",(c,))
+    cols={r['name'] for r in con.execute('PRAGMA table_info(crm_ai_channel_health)')}
+    if 'rate_limited_until' not in cols:
+        con.execute("ALTER TABLE crm_ai_channel_health ADD COLUMN rate_limited_until TEXT NOT NULL DEFAULT ''")
+        con.execute("UPDATE crm_ai_channel_health SET rate_limited_until=next_check WHERE kind='rate_limit'")
+    for c in api().CHANNELS:con.execute("INSERT OR IGNORE INTO crm_ai_channel_health(channel,state,kind,reason,action,proof,checked_at,next_check,blocks_history) VALUES(?,'unknown','','Not checked yet','The next run will check this connection.','','','',0)",(c,))
 
 def alert(con,scope,kind,reason,action,severity='warning'):
     m=api();ident=hashlib.sha256((scope+'|'+kind).encode()).hexdigest()
@@ -23,6 +27,7 @@ def alert(con,scope,kind,reason,action,severity='warning'):
 
 def ready(con,channel):
     r=con.execute('SELECT * FROM crm_ai_channel_health WHERE channel=?',(channel,)).fetchone()
+    if r and r['rate_limited_until'] and api().instant()<datetime.fromisoformat(r['rate_limited_until']):raise ValueError(channel+' remains in its rate-limit cooldown until '+r['rate_limited_until'])
     if not r or r['state']!='ready' or not r['checked_at'] or api().instant()-datetime.fromisoformat(r['checked_at'])>timedelta(hours=24):
         raise ValueError(channel+' needs a successful live connection check before sending.')
 
@@ -51,10 +56,11 @@ def dispatch(con,p):
     if channel not in m.CHANNELS:raise ValueError('Choose a supported platform.')
     row=con.execute('SELECT * FROM crm_ai_channel_health WHERE channel=?',(channel,)).fetchone()
     if op=='retry-channel':
-        con.execute("UPDATE crm_ai_channel_health SET state='needs_check',next_check=? WHERE channel=?",(m.stamp(),channel))
+        con.execute("UPDATE crm_ai_channel_health SET state='needs_check',next_check=? WHERE channel=?",(max(m.stamp(),row['rate_limited_until']),channel))
         # Keep any history block and alert until the UI has actually been verified.
         return dict(ok=True)
     if op=='channel-ready':
+        if row['rate_limited_until'] and m.instant()<datetime.fromisoformat(row['rate_limited_until']):raise ValueError('Rate-limit cooldown is still active; a recheck cannot shorten it.')
         m.live_run(con,p.get('run_id'));proof=m.short(p,'proof',3000)
         if len(proof.split())<5:raise ValueError('Describe the observed signed-in platform and readable conversation history.')
         con.execute("UPDATE crm_ai_channel_health SET state='ready',kind='',reason='Live platform and history verified',action='',proof=?,checked_at=?,next_check='',blocks_history=0 WHERE channel=?",(proof,m.stamp(),channel))
@@ -69,6 +75,9 @@ def dispatch(con,p):
     cooldown=30 if kind=='temporary_error' else 60 if kind=='rate_limit' else 1440
     # Missing-history/auth prompts need human repair; do not repeatedly click/code-request each run.
     next_check=(m.instant()+timedelta(minutes=cooldown)).isoformat()
+    limited_until=max(row['rate_limited_until'],next_check) if kind=='rate_limit' else row['rate_limited_until']
+    next_check=max(next_check,limited_until)
+    con.execute('UPDATE crm_ai_channel_health SET rate_limited_until=? WHERE channel=?',(limited_until,channel))
     con.execute("UPDATE crm_ai_channel_health SET state='blocked',kind=?,reason=?,action=?,proof=?,checked_at=?,next_check=?,blocks_history=? WHERE channel=?",(kind,reason,action,proof,m.stamp(),next_check,int(blocks_history),channel))
     alert(con,channel,kind,reason,action)
     return dict(ok=True,channel_blocked=channel,other_channels_continue=True)
@@ -84,7 +93,7 @@ def snapshot(con):
     uncertain=con.execute("SELECT COUNT(*) FROM crm_ai_prospects WHERE state IN ('sending','unconfirmed','blocked')").fetchone()[0]+con.execute("SELECT COUNT(*) FROM crm_ai_messages WHERE direction='outbound' AND state IN ('sending','unconfirmed','blocked')").fetchone()[0]
     if uncertain and not running:alerts.append(dict(id='send-review',scope='Sending',kind='uncertain_send',severity='critical',reason='A message attempt needs delivery review. Never resend automatically.',action='Inspect the exact recipient thread and resolve delivery before restarting sends.',opened_at='',updated_at=''))
     selected=[r for r in channels if r['channel'] in json.loads(cfg['channels'])]
-    available=[r['channel'] for r in selected if r['state']=='ready']
+    available=[r['channel'] for r in selected if r['state']=='ready' and not history_unverified(r) and (not r['rate_limited_until'] or now>=datetime.fromisoformat(r['rate_limited_until']))]
     mode='Paused' if not cfg['enabled'] else 'Worker offline' if not fresh else 'Working with blockers' if alerts else 'Checking connections' if not available else 'Working' if running else 'Waiting for next run'
     return dict(mode=mode,heartbeat_fresh=fresh,active_run=running['id'] if running else None,channels=channels,alerts=alerts,available_channels=available,
                 cold_outreach_held=any(history_unverified(r) for r in selected),last_run=dict(con.execute('SELECT * FROM crm_ai_runs ORDER BY started_at DESC LIMIT 1').fetchone() or {}))
