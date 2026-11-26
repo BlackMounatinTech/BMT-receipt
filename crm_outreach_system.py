@@ -24,6 +24,9 @@ def schema(con):
       ad_url TEXT NOT NULL, issue TEXT NOT NULL, improvement TEXT NOT NULL, scale_evidence TEXT NOT NULL,
       evidence TEXT NOT NULL, checked_at TEXT NOT NULL, message TEXT NOT NULL, state TEXT NOT NULL,
       created_at TEXT NOT NULL, attempted_at TEXT, sent_at TEXT, send_proof TEXT, run_id TEXT, stop_reason TEXT)''')
+    columns={r['name'] for r in con.execute('PRAGMA table_info(crm_ai_prospects)')}
+    for name,default in [('source_type','ad_issue'),('intent_quote',''),('intent_url',''),('intent_author','')]:
+        if name not in columns:con.execute(f"ALTER TABLE crm_ai_prospects ADD COLUMN {name} TEXT NOT NULL DEFAULT '{default}'")
     con.execute('''CREATE TABLE IF NOT EXISTS crm_ai_replies (id TEXT PRIMARY KEY, prospect_id TEXT NOT NULL,
       observed_at TEXT NOT NULL, text TEXT NOT NULL, classification TEXT NOT NULL, source_url TEXT NOT NULL,
       suggested_reply TEXT NOT NULL, UNIQUE(prospect_id,text))''')
@@ -35,9 +38,9 @@ def instant(): return datetime.now(timezone.utc)
 def day(value=None): return (value or instant()).astimezone(LOCAL).date().isoformat()
 def host(url): return (urlparse(url).hostname or '').lower().removeprefix('www.')
 def phone(value): return re.sub(r'\D','',value)[-10:]
-def url(value, field):
-    if not isinstance(value,str) or len(value)>2000 or urlparse(value).scheme!='https' or not urlparse(value).hostname:
-        raise ValueError('Provide a valid HTTPS '+field+'.')
+def url(value, field, allow_http=False):
+    if not isinstance(value,str) or len(value)>2000 or urlparse(value).scheme not in (('http','https') if allow_http else ('https',)) or not urlparse(value).hostname:
+        raise ValueError('Provide a valid '+field+' URL.')
     return value.strip()
 def short(p,key,limit=10000,required=True):
     value=p.get(key,'')
@@ -92,10 +95,15 @@ def clear_history(con,lead):
 def candidate(con,p):
     if p.get('country')!='USA' or p.get('trade') not in TRADES or p.get('channel') not in CHANNELS:
         raise ValueError('Only the approved USA contractor trades and outreach channels qualify.')
+    source=p.get('source_type','ad_issue')
+    if source not in ('ad_issue','public_intent'):raise ValueError('Choose a valid prospect source.')
+    intent_quote=short(p,'intent_quote',3000,source=='public_intent')
+    intent_author=short(p,'intent_author',300,source=='public_intent')
+    intent_url=url(p.get('intent_url'),'comment permalink') if source=='public_intent' else ''
     clean={k:short(p,k,200 if k in ('company','location','phone','email') else 10000,required=k not in ('phone','email')) for k in ('company','location','phone','email','issue','improvement','scale_evidence','evidence','message','checked_at')}
-    for k in ('profile_url','website','ad_url'):clean[k]=url(p.get(k),k)
+    for k in ('profile_url','website','ad_url'):clean[k]=url(p.get(k),k,allow_http=k=='website')
     checked=datetime.fromisoformat(clean['checked_at'].replace('Z','+00:00'))
-    if checked.tzinfo is None or not timedelta(minutes=-2)<=instant()-checked<=timedelta(hours=24):raise ValueError('Recheck the ad evidence today before outreach.')
+    if checked.tzinfo is None or not timedelta(minutes=-2)<=instant()-checked<=timedelta(hours=24):raise ValueError('Recheck the source evidence today before outreach.')
     profile_host=host(clean['profile_url'])
     if not any(profile_host==d or profile_host.endswith('.'+d) for d in {'Facebook':['facebook.com','messenger.com'],'Instagram':['instagram.com'],'Skool':['skool.com']}[p['channel']]):
         raise ValueError('Profile link does not match the selected channel.')
@@ -104,8 +112,8 @@ def candidate(con,p):
     if con.execute('SELECT 1 FROM crm_ai_prospects WHERE identity=?',(identity,)).fetchone():raise ValueError('This company is already in the outreach system.')
     lead=existing_lead(con,clean);clear_history(con,lead)
     ident=secrets.token_hex(16)
-    cols=['id','identity','lead_id','company','location','trade','channel','profile_url','website','phone','email','ad_url','issue','improvement','scale_evidence','evidence','checked_at','message','state','created_at']
-    values=[ident,identity,lead['id'] if lead else None,clean['company'],clean['location'],p['trade'],p['channel'],clean['profile_url'],clean['website'],clean['phone'],clean['email'],clean['ad_url'],clean['issue'],clean['improvement'],clean['scale_evidence'],clean['evidence'],clean['checked_at'],clean['message'],'ready',stamp()]
+    cols=['id','identity','lead_id','company','location','trade','channel','profile_url','website','phone','email','ad_url','issue','improvement','scale_evidence','evidence','checked_at','message','state','created_at','source_type','intent_quote','intent_url','intent_author']
+    values=[ident,identity,lead['id'] if lead else None,clean['company'],clean['location'],p['trade'],p['channel'],clean['profile_url'],clean['website'],clean['phone'],clean['email'],clean['ad_url'],clean['issue'],clean['improvement'],clean['scale_evidence'],clean['evidence'],clean['checked_at'],clean['message'],'ready',stamp(),source,intent_quote,intent_url,intent_author]
     con.execute('INSERT INTO crm_ai_prospects ('+','.join(cols)+') VALUES ('+','.join('?' for _ in cols)+')',values)
     return dict(id=ident,state='ready')
 
@@ -146,7 +154,7 @@ def action(p):
             live_run(con,p.get('run_id'));cfg=config(con)
             row=con.execute('SELECT * FROM crm_ai_prospects WHERE id=?',(p.get('id'),)).fetchone()
             if not row or row['state']!='ready' or not cfg['enabled'] or row['channel'] not in json.loads(cfg['channels']):raise ValueError('Sending is paused or this prospect is not ready.')
-            if instant()-datetime.fromisoformat(row['checked_at'].replace('Z','+00:00'))>timedelta(hours=24):raise ValueError('Ad evidence is too old; research again.')
+            if instant()-datetime.fromisoformat(row['checked_at'].replace('Z','+00:00'))>timedelta(hours=24):raise ValueError('Source evidence is too old; research again.')
             clear_history(con,existing_lead(con,dict(row)))
             if con.execute("SELECT 1 FROM crm_ai_prospects WHERE run_id=? AND attempted_at IS NOT NULL",(p['run_id'],)).fetchone():raise ValueError('This run already attempted its introductory message.')
             attempts=sum(day(datetime.fromisoformat(r['attempted_at']))==day() for r in con.execute('SELECT attempted_at FROM crm_ai_prospects WHERE attempted_at IS NOT NULL'))
@@ -170,7 +178,7 @@ def action(p):
             sent=stamp();method=row['channel']+' DM'
             con.execute('INSERT OR IGNORE INTO crm_outreach_events VALUES(?,?,?,?,?,?)',('ai:'+row['id'],n,method,'Michael',sent,row['message']))
             con.execute("UPDATE crm_leads SET stage=CASE WHEN stage='Cold' THEN 'Outreach' ELSE stage END,status=CASE WHEN status='New' THEN 'Contacted' ELSE status END,last_contacted_at=?,contact_method=?,contact_account='Michael',updated_at=?,revision=revision+1 WHERE id=?",(sent,method,sent,n))
-            con.execute('INSERT INTO crm_notes(lead_id,author,text,created_at) VALUES(?,?,?,?)',(n,'Michael',method+' sent\n'+row['profile_url']+'\n'+row['message']+'\nAd evidence: '+row['ad_url']+'\n'+row['issue'],sent))
+            con.execute('INSERT INTO crm_notes(lead_id,author,text,created_at) VALUES(?,?,?,?)',(n,'Michael',method+' sent\n'+row['profile_url']+'\n'+row['message']+'\nSource: '+row['source_type']+'\nAd / post: '+row['ad_url']+'\n'+row['issue']+('\nPublic comment by '+row['intent_author']+': '+row['intent_quote']+'\n'+row['intent_url'] if row['source_type']=='public_intent' else ''),sent))
             con.execute("UPDATE crm_ai_prospects SET state='sent',sent_at=?,send_proof=?,lead_id=? WHERE id=?",(sent,proof,n,row['id']))
             return dict(ok=True,lead_id=n)
         if op=='reply':

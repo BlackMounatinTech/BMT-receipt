@@ -80,6 +80,25 @@ class OutreachSystemTests(unittest.TestCase):
         self.assertEqual(report['automatic_outreach'][0]['sent'],1)
         self.assertEqual(report['automatic_outreach'][0]['replies'],1)
         self.assertEqual(report['outreach'],[])
+    def test_public_intent_preserves_comment_and_does_not_require_own_ad(self):
+        run=self.claim();p=self.candidate(run)
+        p.update(source_type='public_intent',ad_url='https://www.facebook.com/ads/library/?id=agency123',intent_quote='Can you help my fencing company get more jobs?',intent_author='Demo Fence Co',intent_url='https://www.facebook.com/agency/posts/123?comment_id=456',issue='Contractor publicly asked for help finding fence jobs.',website='http://democoncrete.example')
+        ident=self.post(p).json['id']
+        entry=next(x for x in self.client.get('/api/outreach-system').json['prospects'] if x['id']==ident)
+        self.assertEqual(entry['source_type'],'public_intent')
+        self.assertEqual(entry['intent_quote'],p['intent_quote'])
+        self.assertEqual(entry['intent_url'],p['intent_url'])
+        self.assertEqual(entry['ad_url'],p['ad_url'])
+        self.assertEqual(entry['website'],'http://democoncrete.example')
+        self.post({'op':'begin-send','run_id':run,'id':ident})
+        self.post({'op':'send-result','id':ident,'state':'sent','proof':'Isolated test confirmation'})
+        self.assertIn(p['intent_quote'],store.notes_for(store.list_leads()[0]['id'])[0]['text'])
+
+    def test_public_intent_rejects_missing_comment_proof(self):
+        run=self.claim();p=self.candidate(run);p['source_type']='public_intent'
+        self.assertEqual(self.post(p,False).status_code,400)
+        self.assertEqual(self.client.get('/api/outreach-system').json['prospects'],[])
+
     def test_pause_and_expired_lease_block_sends(self):
         run=self.claim();ident=self.post(self.candidate(run)).json['id']
         self.post({'op':'settings','enabled':False})

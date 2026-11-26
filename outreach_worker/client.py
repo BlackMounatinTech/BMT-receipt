@@ -5,6 +5,7 @@ import json
 import re
 import sys
 from pathlib import Path
+from urllib.error import HTTPError
 from urllib.request import Request, build_opener, HTTPCookieProcessor
 
 CONFIG=Path.home()/'.config/bmt-outreach-system/config.json'
@@ -17,7 +18,12 @@ def request(method='GET',payload=None):
     body=json.dumps(payload).encode() if payload is not None else None
     req=Request(cfg['base_url']+'/api/outreach-system',data=body,method=method,
                 headers={'Content-Type':'application/json','X-CSRF-Token':csrf,'X-BMT-Outreach-Key':cfg['key']})
-    with opener.open(req,timeout=30) as response:return json.load(response)
+    try:
+        with opener.open(req,timeout=30) as response:return json.load(response)
+    except HTTPError as e:
+        try:detail=json.loads(e.read().decode()).get('error','CRM request rejected.')
+        except (ValueError,UnicodeError):detail='CRM request rejected.'
+        raise ValueError(str(detail)) from None
 
 if __name__=='__main__':
     try:
