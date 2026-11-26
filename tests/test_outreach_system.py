@@ -27,7 +27,9 @@ class OutreachSystemTests(unittest.TestCase):
         return r
     def claim(self):
         self.post({'op':'settings','enabled':True})
-        return self.post({'op':'claim'}).json['run']
+        run=self.post({'op':'claim'}).json['run']
+        for channel in machine.CHANNELS:self.post({'op':'channel-ready','channel':channel,'run_id':run,'proof':'Isolated test: verified correct signed-in account and complete readable thread history.'})
+        return run
     def candidate(self,run,name='Demo Concrete',site='https://democoncrete.example',phone='5555550100'):
         observation='I saw your driveway advertisement.';approach='I would test a driveway-specific quote campaign.';cta='Open to a 15-minute Zoom call?'
         return {'op':'candidate','run_id':run,'country':'USA','qualification':{
@@ -282,3 +284,65 @@ class OutreachSystemTests(unittest.TestCase):
         with store.connect() as con:
             self.assertEqual(con.execute('SELECT COUNT(*) FROM crm_outreach_events').fetchone()[0],0)
             self.assertEqual(con.execute('SELECT COUNT(*) FROM crm_call_events').fetchone()[0],0)
+
+    def block_facebook(self,run,kind='history_missing',blocks_history=True):
+        return self.post({'op':'channel-block','run_id':run,'channel':'Facebook','kind':kind,'reason':'Facebook displays Chat history is missing.','action':'Restore Messenger history with the code prompt, then select Check next run.','proof':'Observed missing-history prompt in the signed-in Messenger inbox.','blocks_history':blocks_history})
+
+    def test_channel_block_preserves_scheduler_and_existing_other_channel_replies(self):
+        run=self.claim();p=self.candidate(run);p.update(channel='Instagram',profile_url='https://www.instagram.com/democoncrete')
+        ident=self.post(p).json['id'];self.post({'op':'begin-send','run_id':run,'id':ident})
+        self.post({'op':'send-result','id':ident,'state':'sent','proof':'Verified Instagram intro in correct company thread.'})
+        self.block_facebook(run)
+        incoming=self.inbound(ident)
+        self.post({'op':'thread-check','run_id':run,'id':ident,'proof':'Verified correct Instagram company thread and its new inbound question.'})
+        reply=self.post({'op':'begin-reply','id':ident,'run_id':run,'reply_to':incoming,'text':'Which area do you want more driveway jobs in?','grounding':'They asked about more driveway jobs in an existing verified Instagram thread.'}).json['id']
+        self.post({'op':'reply-result','message_id':reply,'state':'sent','proof':'Response visibly sent in the correct Instagram recipient thread.'})
+        d=self.client.get('/api/outreach-system').json
+        self.assertTrue(d['config']['enabled']);self.assertTrue(d['health']['cold_outreach_held'])
+        self.assertEqual(d['health']['alerts'][0]['scope'],'Facebook')
+
+    def test_missing_cross_channel_history_blocks_new_intros_without_pausing_all(self):
+        run=self.claim();self.block_facebook(run)
+        p=self.candidate(run);p.update(channel='Instagram',profile_url='https://www.instagram.com/democoncrete')
+        ident=self.post(p).json['id']
+        self.assertEqual(self.post({'op':'begin-send','run_id':run,'id':ident},False).status_code,400)
+        self.assertTrue(self.client.get('/api/outreach-system').json['config']['enabled'])
+
+    def test_retry_keeps_alert_and_block_until_actual_live_verification(self):
+        run=self.claim();self.block_facebook(run)
+        self.post({'op':'retry-channel','channel':'Facebook'})
+        d=self.client.get('/api/outreach-system').json
+        fb=next(c for c in d['health']['channels'] if c['channel']=='Facebook')
+        self.assertEqual(fb['state'],'needs_check');self.assertTrue(fb['blocks_history'])
+        self.assertTrue(any(a['scope']=='Facebook' for a in d['health']['alerts']))
+        self.assertEqual(self.post({'op':'channel-ready','channel':'Facebook','proof':'Browser looks ready.'},False).status_code,400)
+        self.post({'op':'channel-ready','channel':'Facebook','run_id':run,'proof':'Verified signed-in Michael profile, restored readable history and correct company thread.'})
+        d=self.client.get('/api/outreach-system').json
+        self.assertFalse(d['health']['cold_outreach_held'])
+        self.assertFalse(any(a['scope']=='Facebook' for a in d['health']['alerts']))
+
+    def test_blocked_target_cannot_send_even_when_history_is_readable(self):
+        run=self.claim();self.block_facebook(run,'rate_limit',False)
+        ident=self.post(self.candidate(run)).json['id']
+        self.assertEqual(self.post({'op':'begin-send','run_id':run,'id':ident},False).status_code,400)
+        d=self.client.get('/api/outreach-system').json
+        self.assertFalse(d['health']['cold_outreach_held']);self.assertTrue(d['config']['enabled'])
+
+    def test_global_reason_survives_heartbeat_and_offline_is_not_reported_as_working(self):
+        run=self.claim()
+        self.post({'op':'attention','reason':'Browser tool unavailable; all channels cannot be checked.','action':'Restart the active Mac session and verify the browser tool.'})
+        self.post({'op':'heartbeat','state':'Mac worker connected'})
+        d=self.client.get('/api/outreach-system').json
+        self.assertFalse(d['config']['enabled']);self.assertIn('Browser tool unavailable',d['config']['worker_state'])
+        self.assertTrue(any(a['kind']=='global_stop' for a in d['health']['alerts']))
+        self.assertTrue(d['health']['heartbeat_fresh'])
+        with store.connect() as con:con.execute('UPDATE crm_ai_config SET heartbeat=?',((machine.instant()-timedelta(minutes=5)).isoformat(),))
+        d=self.client.get('/api/outreach-system').json
+        self.assertTrue(any(a['kind']=='offline' for a in d['health']['alerts']))
+
+    def test_uncertain_delivery_cannot_be_overridden_by_start_button(self):
+        run,ident=self.sent_company();incoming=self.inbound(ident)
+        self.post({'op':'thread-check','id':ident,'run_id':run,'proof':'Read current company thread and latest inbound before sending.'})
+        result=self.post({'op':'begin-reply','id':ident,'run_id':run,'reply_to':incoming,'text':'Which service area do you want more driveway jobs in?','grounding':'The company asked for help getting more driveway jobs in their area.'}).json
+        self.post({'op':'reply-result','message_id':result['id'],'state':'unconfirmed','proof':'Delivery status unclear; needs actual thread inspection.'})
+        self.assertEqual(self.post({'op':'settings','enabled':True},False).status_code,400)

@@ -7,7 +7,7 @@
   async function load() {
     const ticket=++loading;
     try {const next=await api('/api/outreach-system');if(ticket!==loading)return;data=next;fail('');render();}
-    catch(e){fail(e.message);}
+    catch(e){fail(e.message);const b=$('#outreach-health-banner');b.hidden=false;b.className='outreach-alert-banner needs-attention';b.textContent='Outreach status unavailable. The CRM connection could not be checked; do not assume messages are being sent.';}
   }
   async function write(p){await api('/api/outreach-system',{method:'POST',body:JSON.stringify(p)});await load();}
   function table(headers,rows){const t=el('table',''),head=el('tr','');for(const h of headers)head.append(el('th','',h));t.append(head);for(const values of rows){const tr=el('tr','');for(const v of values)tr.append(el('td','',v??'—'));t.append(tr);}return t;}
@@ -45,9 +45,18 @@
     }
     return false;
   }
+  function renderHealth(){
+    const h=data.health||{},banner=$('#outreach-health-banner'),root=$('#system-health');
+    banner.replaceChildren();banner.hidden=false;banner.append(el('strong','','Outreach: '+(h.mode||'Status unknown')));
+    const alerts=h.alerts||[];if(alerts.length){banner.className='outreach-alert-banner needs-attention';banner.append(el('span','',alerts.map(a=>a.scope+': '+a.reason).join(' · ')),link('View issues ↗','/#system'));}else{banner.className='outreach-alert-banner';banner.append(el('span','','Next scheduled check '+date(data.config.next_run)));}
+    root.replaceChildren();if(h.cold_outreach_held)root.append(el('p','system-warning','New introductions are held while cross-platform contact history is unavailable. Verified existing conversations on other available platforms can continue.'));
+    for(const c of h.channels||[]){const box=el('div','system-prospect');box.append(el('h3','',c.channel+' · '+c.state.replaceAll('_',' ')),el('p','',c.reason),el('p','system-meta','Last checked '+date(c.checked_at)));if(c.action)box.append(el('p','','Needed: '+c.action));if(c.next_check)box.append(el('p','system-meta','Next connection check no earlier than '+date(c.next_check)));if(data.config.operator&&c.state!=='ready'){const b=el('button','','Check next run');b.onclick=async()=>{b.disabled=true;try{await write({op:'retry-channel',channel:c.channel});}catch(e){fail(e.message);b.disabled=false;}};box.append(b);}root.append(box);}
+    for(const a of alerts){const box=el('div','system-warning');box.append(el('strong','',a.scope+' needs attention'),el('p','',a.reason),el('p','','Next step: '+a.action));if(a.updated_at)box.append(el('small','','Last observed '+date(a.updated_at)));if(data.config.operator&&a.scope==='System'){const form=el('form',''),input=el('textarea',''),button=el('button','','Record repair'),status=el('p','');input.required=true;input.placeholder='What was fixed and verified?';button.type='submit';form.append(input,button,status);form.onsubmit=async e=>{e.preventDefault();try{await write({op:'resolve-alert',id:a.id,proof:input.value});}catch(error){status.textContent=error.message;}};box.append(form);}root.append(box);}
+    if(h.last_run&&h.last_run.finished_at)root.append(el('p','system-meta','Last completed run '+date(h.last_run.finished_at)+': '+h.last_run.summary));
+  }
   function render() {
     const c=data.config,t=data.totals,button=$('#system-toggle');
-    $('#system-running').textContent=c.enabled?'Running':'Paused';button.textContent=c.enabled?'Pause outreach':'Start outreach';button.disabled=!c.operator;
+    renderHealth();$('#system-running').textContent=data.health?.mode||(c.enabled?'Enabled':'Paused');button.textContent=c.enabled?'Pause outreach':'Start outreach';button.disabled=!c.operator;
     $('#system-worker').textContent=(c.heartbeat?'Mac last connected '+date(c.heartbeat):'Mac worker not connected')+' · '+c.worker_state+(c.browser_checked_at?' · Browser verified '+date(c.browser_checked_at)+': '+c.browser_state:' · Browser not yet verified by the upgraded worker');
     $('#system-next').textContent=c.enabled?'Next check: '+date(c.next_run):'No messages will be sent while paused.';
     if(!c.operator)fail('This browser can view activity. Connect it using the private Mac worker connection link to control outreach.');
@@ -73,5 +82,5 @@
   form.oninput=()=>settingsDirty=true;
   form.onsubmit=async event=>{event.preventDefault();try{await write({op:'settings',daily_cap:Number(form.elements.daily_cap.value),channels:['Facebook','Instagram','Skool'].filter(n=>form.elements.namedItem(n).checked)});settingsDirty=false;$('#system-settings-state').textContent='Settings saved.';}catch(e){$('#system-settings-state').textContent=e.message;}};
   for(const b of $('#system-filters').querySelectorAll('button'))b.onclick=()=>{filter=b.dataset.filter;$('#system-filters').querySelectorAll('button').forEach(x=>x.classList.toggle('selected',x===b));if(data)render();};
-  $('#system-refresh').onclick=load;document.addEventListener('crm-system-open',load);setInterval(()=>{if(location.hash==='#system')load();},30000);if(location.hash==='#system')load();
+  $('#system-refresh').onclick=load;document.addEventListener('crm-system-open',load);setInterval(load,30000);load();
 })();

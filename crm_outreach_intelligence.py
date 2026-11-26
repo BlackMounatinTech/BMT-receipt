@@ -190,6 +190,8 @@ def dispatch(con,p):
     if op=='begin-reply':
         api.live_run(con,p.get('run_id'));cfg=api.config(con);row=prospect(con,p)
         if not cfg['enabled'] or row['channel'] not in json.loads(cfg['channels']) or not row['sent_at'] or row['state'] in ('stopped','blocked','unconfirmed') or row['conversation_stage'] in ('Not interested','Closed','Human needed'):raise ValueError('This conversation cannot receive an automatic reply.')
+        from crm_outreach_health import ready
+        ready(con,row['channel'])
         if not row['last_thread_check'] or api.instant()-datetime.fromisoformat(row['last_thread_check'])>timedelta(minutes=5):raise ValueError('Inspect the live thread immediately before replying.')
         incoming=con.execute("SELECT * FROM crm_ai_messages WHERE id=? AND prospect_id=? AND direction='inbound' AND state='received'",(p.get('reply_to'),row['id'])).fetchone()
         if not incoming:raise ValueError('Reply only to a new unanswered inbound message.')

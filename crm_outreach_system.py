@@ -8,6 +8,7 @@ from urllib.parse import urlparse
 import crm_store as store
 import crm_calling as calling
 import crm_outreach_intelligence as intelligence
+import crm_outreach_health as health
 
 CHANNELS=('Facebook','Instagram','Skool')
 TRADES=('Concrete','Excavation','Landscaping','Decks and fences')
@@ -36,6 +37,7 @@ def schema(con):
     import crm_stats
     crm_stats.schema(con)
     intelligence.schema(con)
+    health.schema(con)
 
 def stamp(): return store.now()
 def instant(): return datetime.now(timezone.utc)
@@ -70,6 +72,7 @@ def snapshot(operator=False):
         schema(con);expire(con)
         intelligence.reconcile(con)
         details=intelligence.snapshot(con)
+        health_data=health.snapshot(con)
         cfg=config(con);cfg['channels']=json.loads(cfg['channels']);cfg['operator']=operator
         prospects=[dict(r) for r in con.execute('SELECT * FROM crm_ai_prospects ORDER BY created_at DESC LIMIT 300')]
         replies=[dict(r) for r in con.execute('''SELECT r.*,p.company,p.channel,p.profile_url FROM crm_ai_replies r
@@ -80,7 +83,7 @@ def snapshot(operator=False):
         interested=con.execute("SELECT COUNT(DISTINCT prospect_id) FROM crm_ai_messages WHERE direction='inbound' AND classification IN ('Interested','Booking requested')").fetchone()[0]
     today=day()
     return dict(config=cfg,prospects=prospects,replies=replies,runs=runs,
-                intelligence=details,totals=dict(sent_today=sum(day(datetime.fromisoformat(v))==today for v in all_sent),
+                health=health_data,intelligence=details,totals=dict(sent_today=sum(day(datetime.fromisoformat(v))==today for v in all_sent),
                     confirmed_sent=len(all_sent),replies=replied,interested=interested))
 
 def existing_lead(con,p):
@@ -166,19 +169,25 @@ def action(p):
     op=p.get('op')
     with store.connect() as con:
         schema(con);con.commit();con.execute('BEGIN IMMEDIATE');expire(con);intelligence.reconcile(con)
+        handled=health.dispatch(con,p)
+        if handled is not None:return handled
         handled=intelligence.dispatch(con,p)
         if handled is not None:return handled
         if op=='settings':
             cfg=config(con);enabled=p.get('enabled',bool(cfg['enabled']));cap=p.get('daily_cap',cfg['daily_cap']);channels=p.get('channels',json.loads(cfg['channels']))
             if type(enabled)is not bool or type(cap)is not int or not 1<=cap<=100 or not isinstance(channels,list) or not channels or set(channels)-set(CHANNELS):raise ValueError('Check run settings.')
+            if enabled and not cfg['enabled']:
+                uncertain=con.execute("SELECT 1 FROM crm_ai_prospects WHERE state IN ('sending','unconfirmed','blocked')").fetchone() or con.execute("SELECT 1 FROM crm_ai_messages WHERE direction='outbound' AND state IN ('sending','unconfirmed','blocked')").fetchone()
+                if uncertain:raise ValueError('Review the uncertain message delivery before resuming outreach; do not resend automatically.')
             con.execute('UPDATE crm_ai_config SET enabled=?,daily_cap=?,channels=?,next_run=? WHERE id=1',(int(enabled),cap,json.dumps(channels),stamp() if enabled and not cfg['enabled'] else cfg['next_run']))
             return dict(ok=True)
         if op=='attention':
             reason=short(p,'reason',500)
+            health.alert(con,'System','global_stop',reason,short(p,'action',1500,False) or 'Review the run log, resolve the blocker, then resume outreach.','critical')
             con.execute('UPDATE crm_ai_config SET enabled=0,worker_state=? WHERE id=1',('Paused: '+reason,))
             return dict(ok=True)
         if op=='heartbeat':
-            con.execute('UPDATE crm_ai_config SET heartbeat=?,worker_state=? WHERE id=1',(stamp(),short(p,'state',300)))
+            con.execute('UPDATE crm_ai_config SET heartbeat=?,worker_state=CASE WHEN enabled=1 THEN ? ELSE worker_state END WHERE id=1',(stamp(),short(p,'state',300)))
             return dict(ok=True)
         if op=='claim':
             cfg=config(con)
@@ -211,6 +220,7 @@ def action(p):
             window_attempts=sum(datetime.fromisoformat(r['attempted_at'])>instant()-timedelta(minutes=30) for r in con.execute('SELECT attempted_at FROM crm_ai_prospects WHERE attempted_at IS NOT NULL'))
             if run_attempts>=2 or window_attempts>=2:raise ValueError('Maximum two new contacts in any 30-minute window.')
             attempts=sum(day(datetime.fromisoformat(r['attempted_at']))==day() for r in con.execute('SELECT attempted_at FROM crm_ai_prospects WHERE attempted_at IS NOT NULL'))
+            health.intro_gate(con,row['channel'])
             if attempts>=cfg['daily_cap']:raise ValueError('Daily outreach cap reached; keep researching without sending.')
             con.execute("UPDATE crm_ai_prospects SET state='sending',attempted_at=?,run_id=? WHERE id=?",(stamp(),p['run_id'],row['id']))
             return dict(ok=True,message=row['message'])
