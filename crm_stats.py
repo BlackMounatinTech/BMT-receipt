@@ -126,6 +126,23 @@ def report(start, end):
         d['discoveries']+=row['outcome']!='No-show'
         d['closes']+=row['outcome']=='Closed'
         d['minutes']+=row['minutes']; d['offers']+=row['offer_presented']; d['collected_usd']+=row['collected_usd']
+    automatic={}
+    with store.connect() as con:
+        for r in con.execute("SELECT method,sent_at FROM crm_outreach_events WHERE event_key LIKE 'ai:%'"):
+            d=local_day(r['sent_at'])
+            if d and start<=d<=end:
+                key=(d,r['method'].removesuffix(' DM'))
+                automatic.setdefault(key,dict(day=d,channel=key[1],sent=0,replies=0,interested=0,booked=0))['sent']+=1
+        exists=con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='crm_ai_replies'").fetchone()
+        if exists:
+            for r in con.execute("SELECT p.channel,r.prospect_id,MIN(r.observed_at) AS observed_at,MAX(CASE WHEN r.classification IN ('Interested','Booking requested') THEN 1 ELSE 0 END) AS interested FROM crm_ai_replies r JOIN crm_ai_prospects p ON p.id=r.prospect_id WHERE r.classification!='Auto-reply' GROUP BY r.prospect_id"):
+                d=local_day(r['observed_at'])
+                if d and start<=d<=end:
+                    key=(d,r['channel']);entry=automatic.setdefault(key,dict(day=d,channel=key[1],sent=0,replies=0,interested=0,booked=0));entry['replies']+=1;entry['interested']+=r['interested']
+            for r in con.execute("SELECT p.channel,b.created_at FROM crm_ai_prospects p JOIN crm_stats_bookings b ON b.lead_id=p.lead_id WHERE p.sent_at IS NOT NULL AND b.created_at>=p.sent_at"):
+                d=local_day(r['created_at'])
+                if d and start<=d<=end:
+                    key=(d,r['channel']);automatic.setdefault(key,dict(day=d,channel=key[1],sent=0,replies=0,interested=0,booked=0))['booked']+=1
     totals={k:sum(d[k] for d in days.values()) for k in next(iter(days.values())) if k!='day'}
     totals['collected_usd']=round(totals['collected_usd'],2)
-    return dict(days=list(reversed(list(days.values()))),totals=totals,outreach=outreach,discovery=discovery,timezone='Vancouver (UTC−7)')
+    return dict(days=list(reversed(list(days.values()))),totals=totals,outreach=outreach,automatic_outreach=sorted(automatic.values(),key=lambda r:(r['day'],r['channel']),reverse=True),discovery=discovery,timezone='Vancouver (UTC−7)')

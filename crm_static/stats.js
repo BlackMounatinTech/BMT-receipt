@@ -25,6 +25,9 @@
     }
     const days=$('#stats-days');days.replaceChildren();
     for(const d of report.days)row(days,[dayLabel(d.day),d.calls,d.answered,d.no_answer,d.not_interested,d.follow_up,d.booking_outcomes,d.meetings_booked,d.unknown,d.discoveries,d.closes,money(d.collected_usd)]);
+    const auto=$('#stats-auto-outreach');auto.replaceChildren();
+    for(const d of report.automatic_outreach||[])row(auto,[dayLabel(d.day),d.channel,d.sent,d.replies,d.interested,d.booked]);
+    if(!(report.automatic_outreach||[]).length)row(auto,['No automated outreach in this range.','','','','','']);
     const out=$('#stats-outreach-rows');out.replaceChildren();
     for(const d of report.outreach)row(out,[dayLabel(d.day),d.channel,d.sent,d.replies,d.booked,d.notes]);
     if(!report.outreach.length)row(out,['No manual outreach entries in this range.','','','','','']);

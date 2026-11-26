@@ -330,5 +330,34 @@ def stats_discovery():
     except store.Conflict as e: return jsonify(error=str(e)),409
     except ValueError as e: return jsonify(error=str(e)),400
 
+def outreach_operator():
+    import hashlib
+    from pathlib import Path
+    expected=app.config.get('OUTREACH_WORKER_HASH')
+    if expected is None:
+        path=Path(__file__).with_name('crm_outreach_worker.sha256')
+        expected=path.read_text().strip() if path.exists() else ''
+    supplied=request.headers.get('X-BMT-Outreach-Key','')
+    return bool(session.get('outreach_operator')) or bool(expected and supplied and hmac.compare_digest(hashlib.sha256(supplied.encode()).hexdigest(),expected))
+
+@app.route('/api/outreach-system', methods=['GET','POST'])
+def outreach_system():
+    import crm_outreach_system as machine
+    if request.method=='GET':return jsonify(machine.snapshot(outreach_operator()))
+    if not outreach_operator():return jsonify(error='Connect this browser to the Mac worker before changing outreach controls.'),403
+    p=request.get_json(silent=True)
+    if not isinstance(p,dict):return jsonify(error='Provide an outreach action.'),400
+    try:return jsonify(machine.action(p))
+    except (ValueError,TypeError) as e:return jsonify(error=str(e)),400
+
+@app.get('/outreach-connect/<token>')
+def outreach_connect(token):
+    import crm_outreach_system as machine
+    from flask import redirect
+    if not machine.connect_operator(token):return 'This connection link expired or was already used.',403
+    session['outreach_operator']=True
+    session.permanent=True
+    return redirect('/#system')
+
 if __name__ == '__main__':
     app.run(host='127.0.0.1', port=int(os.environ.get('PORT', 5056)))
