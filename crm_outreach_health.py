@@ -29,8 +29,13 @@ def ready(con,channel):
 def intro_gate(con,channel):
     ready(con,channel)
     configured=json.loads(api().config(con)['channels'])
-    for r in con.execute('SELECT * FROM crm_ai_channel_health WHERE blocks_history=1'):
-        if r['channel'] in configured:raise ValueError('New introductions held: '+r['channel']+' contact history is unavailable. Verified existing conversations on other platforms can continue.')
+    for channel_name in configured:
+        r=con.execute('SELECT * FROM crm_ai_channel_health WHERE channel=?',(channel_name,)).fetchone()
+        if history_unverified(r):raise ValueError('New introductions held: '+channel_name+' contact history is not verified. Verified existing conversations on other platforms can continue.')
+
+def history_unverified(row):
+    return not row or row['state'] in ('unknown','needs_check') or row['blocks_history'] or not row['checked_at'] or api().instant()-datetime.fromisoformat(row['checked_at'])>timedelta(hours=24)
+
 
 def dispatch(con,p):
     m=api();op=p.get('op')
@@ -82,4 +87,4 @@ def snapshot(con):
     available=[r['channel'] for r in selected if r['state']=='ready']
     mode='Paused' if not cfg['enabled'] else 'Worker offline' if not fresh else 'Working with blockers' if alerts else 'Checking connections' if not available else 'Working' if running else 'Waiting for next run'
     return dict(mode=mode,heartbeat_fresh=fresh,active_run=running['id'] if running else None,channels=channels,alerts=alerts,available_channels=available,
-                cold_outreach_held=any(r['blocks_history'] for r in selected),last_run=dict(con.execute('SELECT * FROM crm_ai_runs ORDER BY started_at DESC LIMIT 1').fetchone() or {}))
+                cold_outreach_held=any(history_unverified(r) for r in selected),last_run=dict(con.execute('SELECT * FROM crm_ai_runs ORDER BY started_at DESC LIMIT 1').fetchone() or {}))

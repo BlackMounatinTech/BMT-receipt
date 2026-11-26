@@ -352,3 +352,76 @@ class OutreachSystemTests(unittest.TestCase):
         self.block_facebook(run,'rate_limit',False)
         data=self.client.get('/api/outreach-system').json
         self.assertTrue(data['health']['cold_outreach_held'])
+
+    def test_unknown_or_stale_enabled_channel_prevents_new_contact(self):
+        run=self.claim();ident=self.post(self.candidate(run)).json['id']
+        for state in ('unknown','needs_check'):
+            with store.connect() as con:con.execute('UPDATE crm_ai_channel_health SET state=?,blocks_history=0 WHERE channel=?',(state,'Instagram'))
+            self.assertEqual(self.post({'op':'begin-send','id':ident,'run_id':run},False).status_code,400)
+            self.assertTrue(self.client.get('/api/outreach-system').json['health']['cold_outreach_held'])
+        with store.connect() as con:con.execute("UPDATE crm_ai_channel_health SET state='ready',checked_at=? WHERE channel='Instagram'",((machine.instant()-timedelta(hours=25)).isoformat(),))
+        self.assertEqual(self.post({'op':'begin-send','id':ident,'run_id':run},False).status_code,400)
+        self.post({'op':'channel-ready','run_id':run,'channel':'Instagram','proof':'Rechecked signed-in account and complete readable relevant conversation history.'})
+        self.post({'op':'begin-send','id':ident,'run_id':run})
+
+    def test_readable_rate_limited_other_channel_does_not_block_safe_intro(self):
+        run=self.claim();self.block_facebook(run,'rate_limit',False)
+        p=self.candidate(run);p.update(channel='Instagram',profile_url='https://www.instagram.com/democoncrete')
+        ident=self.post(p).json['id']
+        self.post({'op':'begin-send','id':ident,'run_id':run})
+
+    def test_duplicate_inbound_preserves_handoff_booking_and_closed_stage(self):
+        run,ident=self.sent_company();self.inbound(ident)
+        for stage in ('Human needed','Booked','Closed'):
+            with store.connect() as con:con.execute('UPDATE crm_ai_prospects SET conversation_stage=?,conversation_summary=? WHERE id=?',(stage,'Preserve the current human decision.',ident))
+            before=len(self.client.get('/api/outreach-system').json['intelligence']['messages'])
+            self.inbound(ident)
+            d=self.client.get('/api/outreach-system').json
+            self.assertEqual(d['prospects'][0]['conversation_stage'],stage)
+            self.assertEqual(len(d['intelligence']['messages']),before)
+            self.inbound(ident,'Another question about service areas.',key='new-'+stage)
+            d=self.client.get('/api/outreach-system').json
+            self.assertEqual(d['prospects'][0]['conversation_stage'],stage)
+
+    def test_adopt_historical_message_without_new_pitch_requirements(self):
+        run=self.claim();p=self.candidate(run)
+        original='We create advertising for concrete companies. Open to a 10-minute call?'
+        p.update(op='adopt',message=original,original_sent_at=(machine.instant()-timedelta(days=60)).isoformat(),history_proof='Observed the original contractor advertising message and sent date in this verified company thread.')
+        for field in ('ranking','message_review','variant','source_published_at','ad_url'):p.pop(field)
+        ident=self.post(p).json['id']
+        entry=self.client.get('/api/outreach-system').json['prospects'][0]
+        self.assertEqual(entry['id'],ident);self.assertEqual(entry['message'],original)
+        self.assertEqual(entry['variant'],'historical-import')
+        self.assertEqual(entry['source_type'],'existing_conversation')
+        self.assertEqual(self.post({'op':'begin-send','run_id':run,'id':ident},False).status_code,400)
+        with store.connect() as con:self.assertEqual(con.execute('SELECT COUNT(*) FROM crm_outreach_events').fetchone()[0],0)
+
+    def test_full_state_names_are_normalized_without_rewriting_quote(self):
+        run=self.claim();p=self.candidate(run)
+        quote='Our operating concrete company is based in Phoenix, Arizona.'
+        p['qualification'].update(us_state='Arizona',usa_base_quote=quote)
+        p['location']='Phoenix, Arizona'
+        self.post(p)
+        entry=self.client.get('/api/outreach-system').json['prospects'][0]
+        q=json.loads(entry['qualification'])
+        self.assertEqual(q['us_state'],'AZ');self.assertEqual(q['usa_base_quote'],quote)
+        for state in ('Ontario','British Columbia','Canada'):
+            p=self.candidate(run,name='Foreign '+state,site='https://foreign.example')
+            p['qualification']['us_state']=state
+            self.assertEqual(self.post(p,False).status_code,400)
+
+    def test_refresh_reuses_ready_record_but_never_changes_contact_identity(self):
+        run=self.claim();ident=self.post(self.candidate(run)).json['id']
+        with store.connect() as con:con.execute('UPDATE crm_ai_prospects SET checked_at=? WHERE id=?',((machine.instant()-timedelta(hours=25)).isoformat(),ident))
+        self.assertEqual(self.post({'op':'begin-send','id':ident,'run_id':run},False).status_code,400)
+        p={'op':'refresh-candidate','run_id':run,'id':ident,'checked_at':store.now(),'evidence':'Reopened the same current source and verified all saved company facts remain accurate.'}
+        self.assertEqual(self.post({**p,'phone':'5555559999'},False).status_code,400)
+        self.post(p)
+        d=self.client.get('/api/outreach-system').json
+        self.assertEqual(len(d['prospects']),1);self.assertEqual(d['prospects'][0]['id'],ident)
+        self.post({'op':'begin-send','id':ident,'run_id':run})
+        self.assertEqual(self.post(p,False).status_code,400)
+
+    def test_existing_conversation_source_cannot_bypass_new_intro_rules(self):
+        run=self.claim();p=self.candidate(run);p['source_type']='existing_conversation'
+        self.assertEqual(self.post(p,False).status_code,400)

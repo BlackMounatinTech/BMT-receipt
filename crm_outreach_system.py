@@ -117,38 +117,54 @@ def qualification(value,website=None,profile=None,location=None):
 
 def candidate(con,p):
     adopting=p.get('op')=='adopt'
+    refreshing=p.get('op')=='refresh-candidate'
+    previous=con.execute('SELECT * FROM crm_ai_prospects WHERE id=?',(p.get('id'),)).fetchone() if refreshing else None
+    if refreshing:
+        if not previous or previous['state']!='ready' or previous['attempted_at']:raise ValueError('Only an uncontacted ready candidate can be refreshed.')
+        for key in ('company','location','trade','channel','profile_url','phone','email'):
+            if p.get(key)!=previous[key]:raise ValueError('Refresh evidence without changing the company or recipient identity.')
+        if host(p.get('website',''))!=host(previous['website']):raise ValueError('Refresh cannot change company website identity.')
     if p.get('country')!='USA' or p.get('trade') not in TRADES or p.get('channel') not in CHANNELS:
         raise ValueError('Only the approved USA contractor trades and outreach channels qualify.')
     verified=qualification(p.get('qualification'),p.get('website'),p.get('profile_url'),p.get('location'))
-    source=p.get('source_type','ad_issue')
-    if source not in ('ad_issue','public_intent'):raise ValueError('Choose a valid prospect source.')
+    source='existing_conversation' if adopting else p.get('source_type','ad_issue')
+    if source not in ('ad_issue','public_intent','existing_conversation') or (source=='existing_conversation' and not adopting):raise ValueError('Choose a valid prospect source.')
     intent_quote=short(p,'intent_quote',3000,source=='public_intent')
     intent_author=short(p,'intent_author',300,source=='public_intent')
     intent_url=url(p.get('intent_url'),'post or comment permalink') if source=='public_intent' else ''
     clean={k:short(p,k,200 if k in ('company','location','phone','email') else 10000,required=k not in ('phone','email')) for k in ('company','location','phone','email','issue','improvement','scale_evidence','evidence','message','checked_at')}
-    for k in ('profile_url','website','ad_url'):clean[k]=url(p.get(k),k,allow_http=k=='website')
+    for k in ('profile_url','website','ad_url'):
+        value=(p.get('conversation_url') or p.get('ad_url') or p.get('profile_url')) if adopting and k=='ad_url' else p.get(k)
+        clean[k]=url(value,k,allow_http=k=='website')
     checked=datetime.fromisoformat(clean['checked_at'].replace('Z','+00:00'))
     if checked.tzinfo is None or not timedelta(minutes=-2)<=instant()-checked<=timedelta(hours=24):raise ValueError('Recheck the source evidence today before outreach.')
-    published=short(p,'source_published_at',100)
-    recent_source(published)
+    published=short(p,'original_sent_at' if adopting else 'source_published_at',100)
+    if not adopting:recent_source(published)
     profile_host=host(clean['profile_url'])
     if not any(profile_host==d or profile_host.endswith('.'+d) for d in {'Facebook':['facebook.com','messenger.com'],'Instagram':['instagram.com'],'Skool':['skool.com']}[p['channel']]):
         raise ValueError('Profile link does not match the selected channel.')
-    if len(clean['message'])>1800:raise ValueError('Keep the introductory message brief.')
-    priority,ranking=intelligence.rank(p)
-    review,variant=intelligence.message_review(p)
+    if not adopting and len(clean['message'])>1800:raise ValueError('Keep the introductory message brief.')
+    if adopting:
+        priority,ranking,review,variant=0,'{}',json.dumps({'historical':True}),'historical-import'
+    else:
+        priority,ranking=intelligence.rank(p)
+        review,variant=intelligence.message_review(p)
     identity=host(clean['website'])
-    if con.execute('SELECT 1 FROM crm_ai_prospects WHERE identity=?',(identity,)).fetchone():raise ValueError('This company is already in the outreach system.')
+    if not refreshing and con.execute('SELECT 1 FROM crm_ai_prospects WHERE identity=?',(identity,)).fetchone():raise ValueError('This company is already in the outreach system.')
     lead=existing_lead(con,clean)
     if not adopting:clear_history(con,lead)
     elif lead and lead['status'] in ('Won','Lost'):raise ValueError('Do not reopen a closed/customer conversation for cold outreach.')
-    ident=secrets.token_hex(16)
+    ident=previous['id'] if refreshing else secrets.token_hex(16)
     cols=['id','identity','lead_id','company','location','trade','channel','profile_url','website','phone','email','ad_url','issue','improvement','scale_evidence','evidence','checked_at','message','state','created_at','source_type','intent_quote','intent_url','intent_author','source_published_at','qualification']
     values=[ident,identity,lead['id'] if lead else None,clean['company'],clean['location'],p['trade'],p['channel'],clean['profile_url'],clean['website'],clean['phone'],clean['email'],clean['ad_url'],clean['issue'],clean['improvement'],clean['scale_evidence'],clean['evidence'],clean['checked_at'],clean['message'],'ready',stamp(),source,intent_quote,intent_url,intent_author,published,verified]
     for old in con.execute('SELECT * FROM crm_ai_prospects'):
+        if refreshing and old['id']==ident:continue
         if (clean['phone'] and phone(clean['phone'])==phone(old['phone'])) or (clean['email'] and clean['email'].lower()==old['email'].lower()) or old['profile_url'].rstrip('/')==clean['profile_url'].rstrip('/') or (old['company'].lower()==clean['company'].lower() and old['location'].lower()==clean['location'].lower()):
             raise ValueError('This company or recipient is already tracked on another source/channel.')
-    con.execute('INSERT INTO crm_ai_prospects ('+','.join(cols)+') VALUES ('+','.join('?' for _ in cols)+')',values)
+    if refreshing:
+        updates={k:v for k,v in zip(cols,values) if k not in ('id','identity','created_at','state')}
+        con.execute('UPDATE crm_ai_prospects SET '+','.join(k+'=?' for k in updates)+' WHERE id=?',(*updates.values(),ident))
+    else:con.execute('INSERT INTO crm_ai_prospects ('+','.join(cols)+') VALUES ('+','.join('?' for _ in cols)+')',values)
     con.execute('UPDATE crm_ai_prospects SET priority_score=?,ranking=?,message_review=?,variant=? WHERE id=?',(priority,ranking,review,variant,ident))
     con.execute('''INSERT INTO crm_ai_research VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(identity) DO UPDATE SET decision='qualified',reason=excluded.reason,checked_at=excluded.checked_at,run_id=excluded.run_id''',(hashlib.sha256(identity.encode()).hexdigest(),identity,clean['company'],clean['ad_url'],source,p['trade'],p['channel'],'qualified',clean['issue'],stamp(),(instant()+timedelta(days=1)).isoformat(),'[]',p['run_id']))
     intelligence.observation(con,'qualified',identity,p)
@@ -205,6 +221,15 @@ def action(p):
             con.execute("UPDATE crm_ai_config SET worker_state=CASE WHEN enabled=1 THEN 'Waiting for next check' ELSE worker_state END,heartbeat=? WHERE id=1",(stamp(),))
             intelligence.reconcile(con)
             return dict(ok=True)
+        if op=='refresh-candidate':
+            live_run(con,p.get('run_id'))
+            row=con.execute('SELECT * FROM crm_ai_prospects WHERE id=?',(p.get('id'),)).fetchone()
+            if not row:raise ValueError('Choose an existing ready candidate.')
+            merged=dict(row)
+            for field in ('qualification','ranking','message_review'):merged[field]=json.loads(merged[field])
+            merged.update(country='USA');merged.update(p)
+            if 'checked_at' not in p or 'evidence' not in p:raise ValueError('Reinspect the sources and provide a new check timestamp and evidence.')
+            return candidate(con,merged)
         if op in ('candidate','adopt'):
             live_run(con,p.get('run_id'));return candidate(con,p)
         if op=='begin-send':

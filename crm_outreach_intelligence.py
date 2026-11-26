@@ -6,7 +6,19 @@ import secrets
 from datetime import datetime, timedelta
 from urllib.parse import urlparse
 
-STATES=set('AL AK AZ AR CA CO CT DE FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY DC'.split())
+STATE_NAMES=dict(zip(
+    'AL AK AZ AR CA CO CT DE FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY DC'.split(),
+    'Alabama|Alaska|Arizona|Arkansas|California|Colorado|Connecticut|Delaware|Florida|Georgia|Hawaii|Idaho|Illinois|Indiana|Iowa|Kansas|Kentucky|Louisiana|Maine|Maryland|Massachusetts|Michigan|Minnesota|Mississippi|Missouri|Montana|Nebraska|Nevada|New Hampshire|New Jersey|New Mexico|New York|North Carolina|North Dakota|Ohio|Oklahoma|Oregon|Pennsylvania|Rhode Island|South Carolina|South Dakota|Tennessee|Texas|Utah|Vermont|Virginia|Washington|West Virginia|Wisconsin|Wyoming|District of Columbia'.split('|')))
+STATES=set(STATE_NAMES)
+
+def normalize_state(value):
+    if not isinstance(value,str):return None
+    cleaned=value.strip()
+    return cleaned.upper() if cleaned.upper() in STATES else next((k for k,v in STATE_NAMES.items() if v.casefold()==cleaned.casefold()),None)
+
+def contains_state(text,state):
+    return bool(re.search(r'\b'+state+r'\b',text) or re.search(r'\b'+re.escape(STATE_NAMES[state])+r'\b',text,re.I))
+
 CHECKS=('usa_base','usa_operations','trade_fit','advertising_need','scale_fit','identity_match','improvement_fit')
 STAGES=('Awaiting reply','Engaged','Meeting requested','Booked','Human needed','Not interested','Closed')
 MARKERS=('more_work','poor_lead_quality','wasted_ad_spend','no_tracking','slow_followup','budget_objection','timing_objection','trust_objection','already_has_agency','capacity_available','capacity_full','seasonal','needs_details','meeting_interest')
@@ -58,10 +70,10 @@ def qualification(value,website=None,profile=None,location=None):
     outcomes=value.get('checks',{})
     if not isinstance(outcomes,dict) or any(outcomes.get(k)!='pass' for k in CHECKS):raise ValueError('Every qualification check must explicitly pass; unknown or failed means skip.')
     clean['checks']={k:'pass' for k in CHECKS}
-    city=api.short(value,'us_city',100);state=api.short(value,'us_state',2)
+    city=api.short(value,'us_city',100);state=normalize_state(api.short(value,'us_state',40))
     if value.get('country')!='USA' or state not in STATES:raise ValueError('Verify the actual U.S. business city and state.')
     clean.update(country='USA',us_city=city,us_state=state)
-    if location and (city.lower() not in location.lower() or not re.search(r'\b'+state+r'\b',location)):
+    if location and (city.lower() not in location.lower() or not contains_state(location,state)):
         raise ValueError('Company location must match the verified U.S. city and state.')
     for key in ('usa_base','usa_operations'):
         clean[key+'_url']=api.url(value.get(key+'_url'),key+' source',allow_http=True)
@@ -72,7 +84,7 @@ def qualification(value,website=None,profile=None,location=None):
         target=urlparse(clean[key+'_url']);official=urlparse(website or '');social=urlparse(profile or '')
         if website and kind=='official_website' and api.host(clean[key+'_url'])!=api.host(website):raise ValueError('U.S. evidence must come from this company’s official website.')
         if profile and kind=='official_business_profile' and (target.hostname!=social.hostname or target.path.rstrip('/')!=social.path.rstrip('/') or target.query!=social.query):raise ValueError('Business-profile evidence must match the verified company profile.')
-    if city.lower() not in clean['usa_base_quote'].lower() or not re.search(r'\b'+state+r'\b',clean['usa_base_quote']):
+    if city.lower() not in clean['usa_base_quote'].lower() or not contains_state(clean['usa_base_quote'],state):
         raise ValueError('Save the actual city/state location excerpt, not a conclusion.')
     if value.get('review_result')!='pass':raise ValueError('A separate evidence critique must pass before qualification.')
     clean['review_result']='pass';clean['review_reason']=evidence(value.get('review_reason'),'independent evidence critique')
@@ -116,9 +128,12 @@ def inbound(con,p,row):
     api=m();key=api.short(p,'external_key',1000,False) or hashlib.sha256((p['text']+'\n'+p['source_url']).encode()).hexdigest()
     ident=hashlib.sha256((row['id']+'\ninbound\n'+key).encode()).hexdigest()
     classification=p['classification'];state='ignored' if classification in ('Auto-reply','Not interested') else 'received'
-    con.execute('INSERT OR IGNORE INTO crm_ai_messages(id,prospect_id,external_key,direction,text,observed_at,source_url,classification,state) VALUES(?,?,?,\'inbound\',?,?,?,?,?)',(ident,row['id'],key,p['text'],api.stamp(),p['source_url'],classification,state))
+    inserted=con.execute('INSERT OR IGNORE INTO crm_ai_messages(id,prospect_id,external_key,direction,text,observed_at,source_url,classification,state) VALUES(?,?,?,\'inbound\',?,?,?,?,?)',(ident,row['id'],key,p['text'],api.stamp(),p['source_url'],classification,state))
+    if not inserted.rowcount:
+        existing=con.execute('SELECT state FROM crm_ai_messages WHERE id=?',(ident,)).fetchone()
+        return dict(id=ident,state=existing['state'],duplicate=True)
     if classification=='Not interested':con.execute("UPDATE crm_ai_prospects SET conversation_stage='Not interested',conversation_score=0 WHERE id=?",(row['id'],))
-    elif classification!='Auto-reply':
+    elif classification!='Auto-reply' and row['state']!='stopped' and row['conversation_stage'] not in ('Human needed','Booked','Closed','Not interested'):
         stage='Meeting requested' if classification=='Booking requested' else 'Engaged'
         con.execute('UPDATE crm_ai_prospects SET conversation_stage=? WHERE id=?',(stage,row['id']))
     return dict(id=ident,state=state)
