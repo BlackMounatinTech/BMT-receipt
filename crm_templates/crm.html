@@ -46,7 +46,7 @@
  <div class="title-row"><div><h1 id="pipeline-title">Active prospects</h1><p id="summary">Loading your leads…</p></div><button id="add" class="primary">+ Add lead</button></div>
  <div class="list-toolbar"><div id="lead-filters" class="tabs" role="group" aria-label="Filter leads"><button class="selected" data-view="open">Open</button><button data-view="new">New <span id="new-count"></span></button><button data-view="due">Follow-ups</button><button data-view="closed">Closed</button></div><input id="search" type="search" placeholder="Search leads" aria-label="Search leads"></div>
  <div id="outreach-filters" class="outreach-filters" hidden>
-  <label>Platform<select id="outreach-platform"><option value="">All platforms</option><option>Facebook DM</option><option>Instagram DM</option><option>Skool</option><option>Email</option><option>Phone</option><option value="unknown">Not recorded</option></select></label>
+  <label>Platform<select id="outreach-platform"><option value="">All platforms</option><option>Facebook DM</option><option>Instagram DM</option><option>Skool DM</option><option>Email</option><option>Phone</option><option value="unknown">Not recorded</option></select></label>
   <label>Status<select id="outreach-status"><option value="">All statuses</option><option>New</option><option>Contacted</option><option>Follow-up</option></select></label>
   <label>Contacted from<input id="outreach-from" type="date"></label><label>Through<input id="outreach-to" type="date"></label>
   <label>Sort<select id="outreach-sort"><option value="newest">Newest contact first</option><option value="oldest">Oldest contact first</option><option value="company">Company A–Z</option><option value="followup">Next follow-up first</option></select></label>
@@ -91,7 +91,7 @@
   <div class="pair"><label>Keep in<select name="stage"><option value="Cold">Calling list</option><option value="Outreach">Outreach</option><option value="Prospect">Active prospects</option></select></label><label>Location<input name="location" maxlength="200" placeholder="City, state"></label></div>
   <label>Instagram profile<input name="instagram" type="url" maxlength="500" placeholder="https://www.instagram.com/company/"></label>
   <a id="instagram-link" class="text-button profile-link" target="_blank" rel="noopener noreferrer" hidden>Open Instagram profile</a>
-  <div class="pair"><label>Contact method<select name="contact_method"><option value="">Not recorded</option><option>Instagram DM</option><option>Facebook DM</option><option>Phone</option><option>Email</option><option>Website form</option></select></label><label>Sent from<input name="contact_account" maxlength="200" placeholder="Account or phone used"></label></div>
+  <div class="pair"><label>Contact method<select name="contact_method"><option value="">Not recorded</option><option>Instagram DM</option><option>Facebook DM</option><option>Skool DM</option><option>Phone</option><option>Email</option><option>Website form</option></select></label><label>Sent from<input name="contact_account" maxlength="200" placeholder="Account or phone used"></label></div>
   <p id="contact-date" class="booking-hint" hidden></p>
   <label>Last contacted on<input name="last_contacted_date" type="date"><small>Leave blank if the date is unknown.</small></label>
   <p class="booking-hint">Move to Active prospects when genuine interest is confirmed. Automatic replies don’t count as interest. Mark Won to move them into Customers.</p>
