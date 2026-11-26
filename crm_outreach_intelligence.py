@@ -258,8 +258,9 @@ def dispatch(con,p,owner=False):
         con.execute("INSERT INTO crm_ai_messages(id,prospect_id,external_key,direction,text,observed_at,source_url,classification,reply_to,state,proof,run_id) VALUES(?,?,?,'outbound',?,?,?,'Reply',?,'sending',?,?)",(ident,row['id'],ident,text,api.stamp(),incoming['source_url'],incoming['id'],p['grounding'],p['run_id']))
         return dict(id=ident,message=text)
     if op=='reply-result':
-        row=con.execute("SELECT * FROM crm_ai_messages WHERE id=? AND direction='outbound' AND state='sending'",(p.get('message_id'),)).fetchone()
-        if not row:raise ValueError('No pending reply attempt.')
+        row=con.execute("SELECT * FROM crm_ai_messages WHERE id=? AND direction='outbound'",(p.get('message_id'),)).fetchone()
+        if row and row['state']=='sent' and p.get('state')=='sent':return dict(ok=True,duplicate=True)
+        if not row or row['state']!='sending':raise ValueError('No pending reply attempt.')
         state=p.get('state');proof=api.short(p,'proof',6000)
         if state not in ('sent','unconfirmed','blocked'):raise ValueError('Choose a verified reply result.')
         con.execute('UPDATE crm_ai_messages SET state=?,proof=? WHERE id=?',(state,proof,row['id']))

@@ -1,5 +1,9 @@
 (() => {
   let data=null, filter='queue', settingsDirty=false, loading=0;
+  const drafts=new Map(),clearedDrafts=new Set();
+  function draftForm(form,key){form.dataset.draftKey=key;return form;}
+  function captureDrafts(){for(const f of document.querySelectorAll('form[data-draft-key]')){const key=f.dataset.draftKey;if(clearedDrafts.has(key)){drafts.delete(key);continue;}const fields=[...f.querySelectorAll('input,select,textarea')];drafts.set(key,{values:fields.map(x=>x.value),open:f.closest('details')?.open,focus:fields.indexOf(document.activeElement),start:document.activeElement?.selectionStart,end:document.activeElement?.selectionEnd});}}
+  function restoreDrafts(){for(const f of document.querySelectorAll('form[data-draft-key]')){const d=drafts.get(f.dataset.draftKey);if(!d)continue;const fields=[...f.querySelectorAll('input,select,textarea')];fields.forEach((x,n)=>{if(d.values[n]!==undefined)x.value=d.values[n];});const details=f.closest('details');if(details&&d.open!==undefined)details.open=d.open;if(d.focus>=0){const active=fields[d.focus];active?.focus({preventScroll:true});if(active&&d.start!=null&&active.setSelectionRange)active.setSelectionRange(d.start,d.end);}}clearedDrafts.clear();}
   const form=$('#system-settings');
   const date=s=>s?new Date(s).toLocaleString('en-US',{timeZone:'Etc/GMT+7',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'—';
   const link=(text,url)=>{const a=el('a','',text);a.href=url;a.target='_blank';a.rel='noopener noreferrer';return a;};
@@ -9,19 +13,27 @@
     try {const next=await api('/api/outreach-system');if(ticket!==loading)return;data=next;fail('');render();}
     catch(e){fail(e.message);const b=$('#outreach-health-banner');b.hidden=false;b.className='outreach-alert-banner needs-attention';b.textContent='Outreach status unavailable. The CRM connection could not be checked; do not assume messages are being sent.';}
   }
-  async function write(p){await api('/api/outreach-system',{method:'POST',body:JSON.stringify(p)});await load();}
+  async function write(p){await api('/api/outreach-system',{method:'POST',body:JSON.stringify(p)});const prefix={'outcome':'outcome:','release-handoff':'handoff:','resolve-alert':'alert:','review-delivery':'delivery:'}[p.op];if(prefix)clearedDrafts.add(prefix+p.id);await load();}
   function table(headers,rows){const t=el('table',''),head=el('tr','');for(const h of headers)head.append(el('th','',h));t.append(head);for(const values of rows){const tr=el('tr','');for(const v of values)tr.append(el('td','',v??'—'));t.append(tr);}return t;}
   function outcomeForm(p){
-    const details=el('details',''),form=el('form','');details.append(el('summary','','Log actual meeting / sales outcome'));
+    const details=el('details',''),form=el('form','');details.append(el('summary','','Log actual meeting / sales outcome'));draftForm(form,'outcome:'+p.id);
     const label=el('label','','Outcome'),select=el('select','');for(const name of ['Held','Closed','Lost','No-show']){const o=el('option','',name);o.value=name;select.append(o);}label.append(select);
     const timeLabel=el('label','','When it happened (your local time)'),time=el('input','');time.type='datetime-local';time.required=true;const now=new Date();time.value=new Date(now.getTime()-now.getTimezoneOffset()*60000).toISOString().slice(0,16);timeLabel.append(time);
     const proofLabel=el('label','','Actual meeting / payment evidence'),proof=el('textarea','');proof.required=true;proof.minLength=20;proof.maxLength=4000;proofLabel.append(proof);
     const save=el('button','','Save outcome'),status=el('p','');save.type='submit';form.append(label,timeLabel,proofLabel,save,status);form.onsubmit=async event=>{event.preventDefault();save.disabled=true;try{await write({op:'outcome',id:p.id,outcome:select.value,occurred_at:new Date(time.value).toISOString(),proof:proof.value});}catch(e){status.textContent=e.message;save.disabled=false;}};details.append(form);return details;
   }
   function handoffForm(p){
-    const details=el('details',''),form=el('form','');details.append(el('summary','','Resolve human handoff'));
+    const details=el('details',''),form=el('form','');details.append(el('summary','','Resolve human handoff'));draftForm(form,'handoff:'+p.id);
     const label=el('label','','What did you resolve?'),proof=el('textarea','');proof.required=true;proof.minLength=20;label.append(proof);
     const save=el('button','','Record resolution and allow replies'),status=el('p','');save.type='submit';form.append(label,save,el('p','booking-hint','Records your resolution. A reply still requires a new unanswered inbound message and the normal checks.'),status);form.onsubmit=async event=>{event.preventDefault();save.disabled=true;try{await write({op:'release-handoff',id:p.id,proof:proof.value});}catch(e){status.textContent=e.message;save.disabled=false;}};details.append(form);return details;
+  }
+  function deliveryForm(p){
+    const box=el('div','system-warning'),form=draftForm(el('form',''),'delivery:'+p.id);
+    box.append(el('h3','','Review delivery · '+p.company+' · '+p.channel),el('p','system-message',p.text),link('Inspect recipient conversation ↗',p.profile_url));
+    const select=el('select','');select.required=true;for(const [value,label] of [['','Choose what you verified'],['sent','Exact message is visible as sent'],['not_sent','Not sent — retire without retry']]){const o=el('option','',label);o.value=value;select.append(o);}
+    const proof=el('textarea','');proof.required=true;proof.minLength=20;proof.maxLength=4000;proof.placeholder='Exact conversation link and what you verified. If delivery is still unclear, leave this unresolved.';
+    const button=el('button','','Record delivery review'),status=el('p','');button.type='submit';form.append(select,proof,el('p','booking-hint','Records evidence only. This never sends a message or automatically resumes outreach.'),button,status);
+    form.onsubmit=async e=>{e.preventDefault();button.disabled=true;try{await write({op:'review-delivery',kind:p.kind,id:p.id,verdict:select.value,proof:proof.value});}catch(error){status.textContent=error.message;button.disabled=false;}};box.append(form);return box;
   }
   function intelligenceView(root){
     const i=data.intelligence||{},list=i.conversations||[];
@@ -56,15 +68,17 @@
     const alerts=h.alerts||[];if(alerts.length){banner.className='outreach-alert-banner needs-attention';banner.append(el('span','',alerts.map(a=>a.scope+': '+a.reason).join(' · ')),link('View issues ↗','/#system'));}else{banner.className='outreach-alert-banner';banner.append(el('span','','Next scheduled check '+date(data.config.next_run)));}
     root.replaceChildren();if(h.cold_outreach_held)root.append(el('p','system-warning','New introductions are held while cross-platform contact history is unavailable. Verified existing conversations on other available platforms can continue.'));
     for(const c of h.channels||[]){const box=el('div','system-prospect');box.append(el('h3','',c.channel+' · '+c.state.replaceAll('_',' ')),el('p','',c.reason),el('p','system-meta','Last checked '+date(c.checked_at)));if(c.action)box.append(el('p','','Needed: '+c.action));if(c.next_check)box.append(el('p','system-meta','Next connection check no earlier than '+date(c.next_check)));if(data.config.operator&&c.state!=='ready'){const b=el('button','','Check next run');b.onclick=async()=>{b.disabled=true;try{await write({op:'retry-channel',channel:c.channel});}catch(e){fail(e.message);b.disabled=false;}};box.append(b);}root.append(box);}
-    for(const a of alerts){const box=el('div','system-warning');box.append(el('strong','',a.scope+' needs attention'),el('p','',a.reason),el('p','','Next step: '+a.action));if(a.updated_at)box.append(el('small','','Last observed '+date(a.updated_at)));if(data.config.operator&&a.scope==='System'){const form=el('form',''),input=el('textarea',''),button=el('button','','Record repair'),status=el('p','');input.required=true;input.placeholder='What was fixed and verified?';button.type='submit';form.append(input,button,status);form.onsubmit=async e=>{e.preventDefault();try{await write({op:'resolve-alert',id:a.id,proof:input.value});}catch(error){status.textContent=error.message;}};box.append(form);}root.append(box);}
+    for(const a of alerts){const box=el('div','system-warning');box.append(el('strong','',a.scope+' needs attention'),el('p','',a.reason),el('p','','Next step: '+a.action));if(a.updated_at)box.append(el('small','','Last observed '+date(a.updated_at)));if(data.config.operator&&a.scope==='System'){const form=el('form',''),input=el('textarea',''),button=el('button','','Record repair'),status=el('p','');draftForm(form,'alert:'+a.id);input.required=true;input.placeholder='What was fixed and verified?';button.type='submit';form.append(input,button,status);form.onsubmit=async e=>{e.preventDefault();try{await write({op:'resolve-alert',id:a.id,proof:input.value});}catch(error){status.textContent=error.message;}};box.append(form);}root.append(box);}
+    if(data.config.operator)for(const p of data.delivery_reviews||[])root.append(deliveryForm(p));
     if(h.last_run&&h.last_run.finished_at)root.append(el('p','system-meta','Last completed run '+date(h.last_run.finished_at)+': '+h.last_run.summary));
   }
   function render() {
+    captureDrafts();
     const c=data.config,t=data.totals,button=$('#system-toggle');
     renderHealth();$('#system-running').textContent=data.health?.mode||(c.enabled?'Enabled':'Paused');button.textContent=c.enabled?'Pause outreach':'Start outreach';button.disabled=!c.operator;
     $('#system-worker').textContent=(c.heartbeat?'Mac last connected '+date(c.heartbeat):'Mac worker not connected')+' · '+c.worker_state+(c.browser_checked_at?' · Browser verified '+date(c.browser_checked_at)+': '+c.browser_state:' · Browser not yet verified by the upgraded worker');
     $('#system-next').textContent=c.enabled?'Next check: '+date(c.next_run):'No messages will be sent while paused.';
-    if(!c.operator)fail('This browser can view activity. Connect it using the private Mac worker connection link to control outreach.');
+    if(!c.operator)fail('This browser can view activity. Use your existing owner browser session to control outreach. If access was lost, recover it through your authenticated Render administrator account.');
     const cards=$('#system-totals');cards.replaceChildren();
     for(const [value,label] of [[t.sent_today,'New intros today'],[t.confirmed_sent,'New intros sent'],[t.replies,'Companies replied'],[t.interested,'Interested / booking requested']]){const card=el('div','stats-card');card.append(el('strong','',value),el('span','',label));cards.append(card);}
     if(!settingsDirty){form.elements.daily_cap.value=c.daily_cap;for(const name of ['Facebook','Instagram','Skool'])form.elements.namedItem(name).checked=c.channels.includes(name);}
@@ -82,6 +96,7 @@
     const history=$('#system-runs');history.replaceChildren();
     for(const r of data.runs){const box=el('div','system-run');box.append(el('strong','',date(r.started_at)+' · '+r.state),el('p','',r.summary||'Checking replies and researching companies…'));history.append(box);}
     if(!data.runs.length)history.append(el('p','booking-hint','The first run will appear here.'));
+    restoreDrafts();
   }
   $('#system-toggle').onclick=async()=>{if(!data)return;const b=$('#system-toggle');b.disabled=true;try{await write({op:'settings',enabled:!data.config.enabled});}catch(e){fail(e.message);b.disabled=false;}};
   form.oninput=()=>settingsDirty=true;

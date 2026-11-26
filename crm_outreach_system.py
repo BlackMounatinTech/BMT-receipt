@@ -83,9 +83,10 @@ def snapshot(operator=False):
         imported=con.execute("SELECT COUNT(*) FROM crm_ai_prospects WHERE source_type='existing_conversation'").fetchone()[0]
         replied=con.execute("SELECT COUNT(DISTINCT prospect_id) FROM crm_ai_messages WHERE direction='inbound' AND classification!='Auto-reply'").fetchone()[0]
         interested=con.execute("SELECT COUNT(DISTINCT prospect_id) FROM crm_ai_messages WHERE direction='inbound' AND classification IN ('Interested','Booking requested')").fetchone()[0]
+        reviews=[dict(r) for r in con.execute("SELECT id,company,channel,profile_url,message AS text,'intro' AS kind FROM crm_ai_prospects WHERE state IN ('unconfirmed','blocked') UNION ALL SELECT m.id,p.company,p.channel,m.source_url,m.text,'reply' FROM crm_ai_messages m JOIN crm_ai_prospects p ON p.id=m.prospect_id WHERE m.direction='outbound' AND m.state IN ('unconfirmed','blocked')")]
     today=day()
     return dict(config=cfg,prospects=prospects,replies=replies,runs=runs,
-                health=health_data,intelligence=details,totals=dict(sent_today=sum(day(datetime.fromisoformat(v))==today for v in all_sent),
+                delivery_reviews=reviews,health=health_data,intelligence=details,totals=dict(sent_today=sum(day(datetime.fromisoformat(v))==today for v in all_sent),
                     confirmed_sent=len(all_sent),imported_conversations=imported,replies=replied,interested=interested))
 
 def existing_lead(con,p):
@@ -184,9 +185,29 @@ def candidate(con,p):
     return dict(id=ident,state='sent' if adopting else 'ready',priority_score=priority)
 
 def action(p,owner=False):
-    op=p.get('op')
+    op=p.get('op');reviewed=False
     with store.connect() as con:
         schema(con);con.commit();con.execute('BEGIN IMMEDIATE');expire(con);intelligence.reconcile(con)
+        if op=='review-delivery':
+            if not owner:raise ValueError('Only Michael’s connected CRM browser can review uncertain delivery.')
+            if con.execute("SELECT 1 FROM crm_ai_runs WHERE state='running'").fetchone():raise ValueError('Wait until the active outreach run finishes before reviewing delivery.')
+            kind=p.get('kind');verdict=p.get('verdict');proof=intelligence.evidence(p.get('proof'),'delivery review')
+            if kind not in ('intro','reply') or verdict not in ('sent','not_sent'):raise ValueError('Choose the attempted message and observed delivery result.')
+            table='crm_ai_prospects' if kind=='intro' else 'crm_ai_messages'
+            row=con.execute('SELECT * FROM '+table+' WHERE id=?',(p.get('id'),)).fetchone()
+            if not row or row['state'] not in ('unconfirmed','blocked') or (kind=='reply' and row['direction']!='outbound'):raise ValueError('Choose an uncertain outbound attempt.')
+            intelligence.observation(con,'delivery_review',row['id'],dict(kind=kind,verdict=verdict,proof=proof,actor='Michael'))
+            con.execute("UPDATE crm_ai_config SET enabled=0,worker_state='Paused: delivery reviewed; resume when ready' WHERE id=1")
+            if verdict=='not_sent':
+                if kind=='intro':con.execute("UPDATE crm_ai_prospects SET state='stopped',stop_reason=?,send_proof=? WHERE id=?",('Michael retired the attempt without resending: '+proof,proof,row['id']))
+                else:
+                    con.execute("UPDATE crm_ai_messages SET state='not_sent',proof=? WHERE id=?",(proof,row['id']))
+                    incoming=con.execute('SELECT rowid FROM crm_ai_messages WHERE id=?',(row['reply_to'],)).fetchone()
+                    con.execute("UPDATE crm_ai_messages SET state='ignored',proof=? WHERE prospect_id=? AND direction='inbound' AND state='received' AND rowid<=?",('Michael retired the reply without resending: '+proof,row['prospect_id'],incoming['rowid']))
+                return dict(ok=True,retired=True)
+            con.execute('UPDATE '+table+" SET state='sending' WHERE id=?",(row['id'],))
+            reviewed=True;op='send-result' if kind=='intro' else 'reply-result'
+            p=dict(op=op,id=row['id'],message_id=row['id'],state='sent',proof=proof)
         handled=health.dispatch(con,p)
         if handled is not None:return handled
         handled=intelligence.dispatch(con,p,owner=owner)
@@ -254,6 +275,7 @@ def action(p,owner=False):
             return dict(ok=True,message=row['message'])
         if op=='send-result':
             row=con.execute('SELECT * FROM crm_ai_prospects WHERE id=?',(p.get('id'),)).fetchone()
+            if row and row['state']=='sent' and p.get('state')=='sent':return dict(ok=True,lead_id=row['lead_id'],duplicate=True)
             if not row or row['state']!='sending':raise ValueError('No active send attempt exists for this prospect.')
             state=p.get('state');proof=short(p,'proof',6000)
             if state not in ('sent','unconfirmed','blocked'):raise ValueError('Choose a verified send result.')
@@ -266,7 +288,7 @@ def action(p,owner=False):
                 n=con.execute("INSERT INTO crm_leads(company,phone,email,need,created_at,updated_at,stage,status) VALUES(?,?,?,?,?,?,'Outreach','Contacted')",(row['company'],row['phone'],row['email'],row['issue']+'\n'+row['improvement'],stamp(),stamp())).lastrowid
                 con.execute('UPDATE crm_leads SET location=?,website=?,instagram=? WHERE id=?',(row['location'],row['website'],row['profile_url'] if row['channel']=='Instagram' else '',n))
             else:n=lead['id']
-            sent=stamp();method=row['channel']+' DM'
+            sent=row['attempted_at'] if reviewed else stamp();method=row['channel']+' DM'
             con.execute('INSERT OR IGNORE INTO crm_outreach_events VALUES(?,?,?,?,?,?)',('ai:'+row['id'],n,method,'Michael',sent,row['message']))
             con.execute("UPDATE crm_leads SET stage=CASE WHEN stage='Cold' THEN 'Outreach' ELSE stage END,status=CASE WHEN status='New' THEN 'Contacted' ELSE status END,last_contacted_at=?,contact_method=?,contact_account='Michael',updated_at=?,revision=revision+1 WHERE id=?",(sent,method,sent,n))
             con.execute('INSERT INTO crm_notes(lead_id,author,text,created_at) VALUES(?,?,?,?)',(n,'Michael',method+' sent\n'+row['profile_url']+'\n'+row['message']+'\nSource: '+row['source_type']+'\nAd / post: '+row['ad_url']+'\n'+row['issue']+('\nPublic comment by '+row['intent_author']+': '+row['intent_quote']+'\n'+row['intent_url'] if row['source_type']=='public_intent' else ''),sent))

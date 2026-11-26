@@ -574,3 +574,67 @@ class OutreachSystemTests(unittest.TestCase):
         d=self.client.get('/api/outreach-system').json
         self.assertEqual(d['prospects'][0]['state'],'stopped')
         self.assertEqual(d['prospects'][0]['conversation_stage'],'Not interested')
+
+    def test_delivery_review_is_owner_only_and_waits_for_run_end(self):
+        run=self.claim();ident=self.post(self.candidate(run)).json['id']
+        self.post({'op':'begin-send','run_id':run,'id':ident})
+        self.post({'op':'send-result','id':ident,'state':'unconfirmed','proof':'Composer closed but message delivery was not visible.'})
+        review={'op':'review-delivery','kind':'intro','id':ident,'verdict':'sent','proof':'Exact introduction visible in the correct recipient thread after inspection.'}
+        self.assertEqual(self.post(review,False).status_code,400)
+        self.owner_session();self.assertEqual(self.post(review,False).status_code,400)
+        self.post({'op':'finish','run_id':run,'summary':'Waiting for owner inspection of uncertain delivery.'})
+        self.post(review)
+        data=self.client.get('/api/outreach-system').json
+        self.assertFalse(data['config']['enabled']);self.assertEqual(data['totals']['confirmed_sent'],1)
+        self.assertEqual(data['delivery_reviews'],[])
+        self.assertEqual(self.post(review,False).status_code,400)
+        self.post({'op':'settings','enabled':True})
+
+    def test_retired_intro_stays_in_contact_history_and_attempt_limits(self):
+        run=self.claim();p=self.candidate(run);ident=self.post(p).json['id']
+        self.post({'op':'begin-send','run_id':run,'id':ident})
+        self.post({'op':'finish','run_id':run,'summary':'Interrupted after begin-send, before delivery confirmation.'})
+        self.owner_session();self.post({'op':'review-delivery','kind':'intro','id':ident,'verdict':'not_sent','proof':'Correct conversation inspected; exact message is absent. Retired without retry.'})
+        d=self.client.get('/api/outreach-system').json
+        self.assertFalse(d['config']['enabled']);self.assertEqual(d['totals']['confirmed_sent'],0)
+        self.assertEqual(d['prospects'][0]['state'],'stopped');self.assertTrue(d['prospects'][0]['attempted_at'])
+        self.post({'op':'settings','enabled':True})
+        self.assertEqual(self.post({'op':'begin-send','run_id':run,'id':ident},False).status_code,400)
+
+    def uncertain_reply(self):
+        run,ident=self.sent_company();incoming=self.inbound(ident)
+        self.post({'op':'thread-check','run_id':run,'id':ident,'proof':'Verified latest inbound in the exact recipient conversation.'})
+        msg=self.post({'op':'begin-reply','id':ident,'run_id':run,'reply_to':incoming,'text':'We can build a driveway campaign. Open to a quick call?','grounding':'The company asked about getting more driveway jobs; offer a relevant campaign and call.'}).json['id']
+        self.post({'op':'reply-result','message_id':msg,'state':'unconfirmed','proof':'Delivery unclear after composer disappeared; no retry attempted.'})
+        self.post({'op':'finish','run_id':run,'summary':'Paused for owner review of uncertain reply.'})
+        return ident,incoming,msg
+
+    def test_confirmed_reply_review_answers_inbound_without_resending(self):
+        ident,incoming,msg=self.uncertain_reply();self.owner_session()
+        self.post({'op':'review-delivery','kind':'reply','id':msg,'verdict':'sent','proof':'Exact reply visibly sent in the correct recipient thread after inspection.'})
+        d=self.client.get('/api/outreach-system').json
+        self.assertEqual(d['delivery_reviews'],[]);self.assertFalse(d['config']['enabled'])
+        self.assertEqual(d['intelligence']['needs_reply'],[])
+        self.assertEqual(next(x for x in d['intelligence']['messages'] if x['id']==msg)['state'],'sent')
+
+    def test_retired_reply_cannot_be_automatically_retried(self):
+        ident,incoming,msg=self.uncertain_reply();self.owner_session()
+        self.post({'op':'review-delivery','kind':'reply','id':msg,'verdict':'not_sent','proof':'Correct recipient thread checked; reply absent. Retired with no automatic retry.'})
+        d=self.client.get('/api/outreach-system').json
+        self.assertEqual(d['intelligence']['needs_reply'],[])
+        self.assertEqual(next(x for x in d['intelligence']['messages'] if x['id']==msg)['state'],'not_sent')
+        self.assertEqual(d['delivery_reviews'],[])
+        self.post({'op':'settings','enabled':True})
+
+    def test_confirmation_replay_does_not_duplicate_notes_or_counts(self):
+        run,ident=self.sent_company()
+        with store.connect() as con:before=con.execute('SELECT COUNT(*) FROM crm_notes').fetchone()[0]
+        self.assertTrue(self.post({'op':'send-result','id':ident,'state':'sent','proof':'Retry after HTTP timeout; exact intro was already confirmed.'}).json['duplicate'])
+        with store.connect() as con:self.assertEqual(con.execute('SELECT COUNT(*) FROM crm_notes').fetchone()[0],before)
+        incoming=self.inbound(ident)
+        self.post({'op':'thread-check','run_id':run,'id':ident,'proof':'Latest company message inspected in the exact recipient thread.'})
+        msg=self.post({'op':'begin-reply','id':ident,'run_id':run,'reply_to':incoming,'text':'We can discuss driveway advertising. Open to a quick call?','grounding':'The company asked about driveway jobs; offer a relevant discussion.'}).json['id']
+        self.post({'op':'reply-result','message_id':msg,'state':'sent','proof':'Exact reply visible in correct recipient thread.'})
+        with store.connect() as con:before=con.execute('SELECT COUNT(*) FROM crm_notes').fetchone()[0]
+        self.assertTrue(self.post({'op':'reply-result','message_id':msg,'state':'sent','proof':'Retry after HTTP timeout; exact reply already confirmed.'}).json['duplicate'])
+        with store.connect() as con:self.assertEqual(con.execute('SELECT COUNT(*) FROM crm_notes').fetchone()[0],before)
