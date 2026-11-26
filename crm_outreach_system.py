@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from urllib.parse import urlparse
 import crm_store as store
 import crm_calling as calling
+import crm_outreach_intelligence as intelligence
 
 CHANNELS=('Facebook','Instagram','Skool')
 TRADES=('Concrete','Excavation','Landscaping','Decks and fences')
@@ -15,7 +16,7 @@ LOCAL=timezone(timedelta(hours=-7))
 def schema(con):
     con.execute('''CREATE TABLE IF NOT EXISTS crm_ai_config (id INTEGER PRIMARY KEY CHECK(id=1), enabled INTEGER NOT NULL,
       daily_cap INTEGER NOT NULL, channels TEXT NOT NULL, next_run TEXT, heartbeat TEXT, worker_state TEXT NOT NULL)''')
-    con.execute('INSERT OR IGNORE INTO crm_ai_config VALUES(1,0,24,?,NULL,NULL,?)',(json.dumps(CHANNELS),'Not connected'))
+    con.execute('INSERT OR IGNORE INTO crm_ai_config(id,enabled,daily_cap,channels,next_run,heartbeat,worker_state) VALUES(1,0,24,?,NULL,NULL,?)',(json.dumps(CHANNELS),'Not connected'))
     con.execute('''CREATE TABLE IF NOT EXISTS crm_ai_runs (id TEXT PRIMARY KEY, started_at TEXT NOT NULL,
       finished_at TEXT, state TEXT NOT NULL, summary TEXT NOT NULL DEFAULT '')''')
     con.execute('''CREATE TABLE IF NOT EXISTS crm_ai_prospects (id TEXT PRIMARY KEY, identity TEXT NOT NULL UNIQUE,
@@ -32,6 +33,9 @@ def schema(con):
       suggested_reply TEXT NOT NULL, UNIQUE(prospect_id,text))''')
     con.execute('''CREATE TABLE IF NOT EXISTS crm_ai_control_links (token_hash TEXT PRIMARY KEY, expires TEXT NOT NULL)''')
     calling.schema(con)
+    import crm_stats
+    crm_stats.schema(con)
+    intelligence.schema(con)
 
 def stamp(): return store.now()
 def instant(): return datetime.now(timezone.utc)
@@ -64,6 +68,8 @@ def expire(con):
 def snapshot(operator=False):
     with store.connect() as con:
         schema(con);expire(con)
+        intelligence.reconcile(con)
+        details=intelligence.snapshot(con)
         cfg=config(con);cfg['channels']=json.loads(cfg['channels']);cfg['operator']=operator
         prospects=[dict(r) for r in con.execute('SELECT * FROM crm_ai_prospects ORDER BY created_at DESC LIMIT 300')]
         replies=[dict(r) for r in con.execute('''SELECT r.*,p.company,p.channel,p.profile_url FROM crm_ai_replies r
@@ -74,7 +80,7 @@ def snapshot(operator=False):
         interested=con.execute("SELECT COUNT(DISTINCT prospect_id) FROM crm_ai_replies WHERE classification IN ('Interested','Booking requested')").fetchone()[0]
     today=day()
     return dict(config=cfg,prospects=prospects,replies=replies,runs=runs,
-                totals=dict(sent_today=sum(day(datetime.fromisoformat(v))==today for v in all_sent),
+                intelligence=details,totals=dict(sent_today=sum(day(datetime.fromisoformat(v))==today for v in all_sent),
                     confirmed_sent=len(all_sent),replies=replied,interested=interested))
 
 def existing_lead(con,p):
@@ -102,22 +108,15 @@ def recent_source(value):
 
 QUALIFICATION=('usa_base','usa_operations','trade_fit','advertising_need','scale_fit','identity_match','improvement_fit')
 
-def qualification(value):
-    if isinstance(value,str):
-        try:value=json.loads(value)
-        except (ValueError,TypeError):value=None
-    if not isinstance(value,dict):raise ValueError('Every qualification check requires saved evidence, including U.S. base and operations.')
-    clean={k:short(value,k,3000) for k in QUALIFICATION}
-    for key in ('usa_base','usa_operations'):
-        if not isinstance(value.get(key+'_url'),str):raise ValueError('Provide the public source verifying U.S. location and operations.')
-        clean[key+'_url']=url(value[key+'_url'],key+' evidence',allow_http=True)
-    return json.dumps(clean)
+def qualification(value,website=None,profile=None,location=None):
+    return intelligence.qualification(value,website,profile,location)
 
 
 def candidate(con,p):
+    adopting=p.get('op')=='adopt'
     if p.get('country')!='USA' or p.get('trade') not in TRADES or p.get('channel') not in CHANNELS:
         raise ValueError('Only the approved USA contractor trades and outreach channels qualify.')
-    verified=qualification(p.get('qualification'))
+    verified=qualification(p.get('qualification'),p.get('website'),p.get('profile_url'),p.get('location'))
     source=p.get('source_type','ad_issue')
     if source not in ('ad_issue','public_intent'):raise ValueError('Choose a valid prospect source.')
     intent_quote=short(p,'intent_quote',3000,source=='public_intent')
@@ -133,19 +132,42 @@ def candidate(con,p):
     if not any(profile_host==d or profile_host.endswith('.'+d) for d in {'Facebook':['facebook.com','messenger.com'],'Instagram':['instagram.com'],'Skool':['skool.com']}[p['channel']]):
         raise ValueError('Profile link does not match the selected channel.')
     if len(clean['message'])>1800:raise ValueError('Keep the introductory message brief.')
+    priority,ranking=intelligence.rank(p)
+    review,variant=intelligence.message_review(p)
     identity=host(clean['website'])
     if con.execute('SELECT 1 FROM crm_ai_prospects WHERE identity=?',(identity,)).fetchone():raise ValueError('This company is already in the outreach system.')
-    lead=existing_lead(con,clean);clear_history(con,lead)
+    lead=existing_lead(con,clean)
+    if not adopting:clear_history(con,lead)
+    elif lead and lead['status'] in ('Won','Lost'):raise ValueError('Do not reopen a closed/customer conversation for cold outreach.')
     ident=secrets.token_hex(16)
     cols=['id','identity','lead_id','company','location','trade','channel','profile_url','website','phone','email','ad_url','issue','improvement','scale_evidence','evidence','checked_at','message','state','created_at','source_type','intent_quote','intent_url','intent_author','source_published_at','qualification']
     values=[ident,identity,lead['id'] if lead else None,clean['company'],clean['location'],p['trade'],p['channel'],clean['profile_url'],clean['website'],clean['phone'],clean['email'],clean['ad_url'],clean['issue'],clean['improvement'],clean['scale_evidence'],clean['evidence'],clean['checked_at'],clean['message'],'ready',stamp(),source,intent_quote,intent_url,intent_author,published,verified]
+    for old in con.execute('SELECT * FROM crm_ai_prospects'):
+        if (clean['phone'] and phone(clean['phone'])==phone(old['phone'])) or (clean['email'] and clean['email'].lower()==old['email'].lower()) or old['profile_url'].rstrip('/')==clean['profile_url'].rstrip('/') or (old['company'].lower()==clean['company'].lower() and old['location'].lower()==clean['location'].lower()):
+            raise ValueError('This company or recipient is already tracked on another source/channel.')
     con.execute('INSERT INTO crm_ai_prospects ('+','.join(cols)+') VALUES ('+','.join('?' for _ in cols)+')',values)
-    return dict(id=ident,state='ready')
+    con.execute('UPDATE crm_ai_prospects SET priority_score=?,ranking=?,message_review=?,variant=? WHERE id=?',(priority,ranking,review,variant,ident))
+    con.execute('''INSERT INTO crm_ai_research VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(identity) DO UPDATE SET decision='qualified',reason=excluded.reason,checked_at=excluded.checked_at,run_id=excluded.run_id''',(hashlib.sha256(identity.encode()).hexdigest(),identity,clean['company'],clean['ad_url'],source,p['trade'],p['channel'],'qualified',clean['issue'],stamp(),(instant()+timedelta(days=1)).isoformat(),'[]',p['run_id']))
+    intelligence.observation(con,'qualified',identity,p)
+    if adopting:
+        sent_at=short(p,'original_sent_at',100);original=datetime.fromisoformat(sent_at.replace('Z','+00:00'))
+        if original.tzinfo is None or original>instant():raise ValueError('Use the observed historical introduction timestamp.')
+        proof=intelligence.evidence(p.get('history_proof'),'existing conversation history')
+        if not lead:
+            n=con.execute("INSERT INTO crm_leads(company,phone,email,need,created_at,updated_at,stage,status) VALUES(?,?,?,?,?,?,'Prospect','Follow-up')",(clean['company'],clean['phone'],clean['email'],clean['issue'],stamp(),stamp())).lastrowid
+            con.execute('UPDATE crm_leads SET location=?,website=? WHERE id=?',(clean['location'],clean['website'],n))
+            con.execute('UPDATE crm_ai_prospects SET lead_id=? WHERE id=?',(n,ident))
+        else:n=lead['id']
+        con.execute('INSERT INTO crm_notes(lead_id,author,text,created_at) VALUES(?,?,?,?)',(n,'Michael','Existing advertising conversation imported (no new message sent)\n'+proof,stamp()))
+        con.execute("UPDATE crm_ai_prospects SET state='sent',sent_at=?,send_proof=?,conversation_stage='Engaged' WHERE id=?",(sent_at,proof,ident))
+    return dict(id=ident,state='sent' if adopting else 'ready',priority_score=priority)
 
 def action(p):
     op=p.get('op')
     with store.connect() as con:
-        schema(con);con.commit();con.execute('BEGIN IMMEDIATE');expire(con)
+        schema(con);con.commit();con.execute('BEGIN IMMEDIATE');expire(con);intelligence.reconcile(con)
+        handled=intelligence.dispatch(con,p)
+        if handled is not None:return handled
         if op=='settings':
             cfg=config(con);enabled=p.get('enabled',bool(cfg['enabled']));cap=p.get('daily_cap',cfg['daily_cap']);channels=p.get('channels',json.loads(cfg['channels']))
             if type(enabled)is not bool or type(cap)is not int or not 1<=cap<=100 or not isinstance(channels,list) or not channels or set(channels)-set(CHANNELS):raise ValueError('Check run settings.')
@@ -172,16 +194,18 @@ def action(p):
                 con.execute("UPDATE crm_ai_config SET enabled=0,worker_state='Paused: send confirmation missing' WHERE id=1")
             con.execute("UPDATE crm_ai_runs SET state='complete',finished_at=?,summary=? WHERE id=?",(stamp(),summary,p['run_id']))
             con.execute("UPDATE crm_ai_config SET worker_state=CASE WHEN enabled=1 THEN 'Waiting for next check' ELSE worker_state END,heartbeat=? WHERE id=1",(stamp(),))
+            intelligence.reconcile(con)
             return dict(ok=True)
-        if op=='candidate':
+        if op in ('candidate','adopt'):
             live_run(con,p.get('run_id'));return candidate(con,p)
         if op=='begin-send':
             live_run(con,p.get('run_id'));cfg=config(con)
             row=con.execute('SELECT * FROM crm_ai_prospects WHERE id=?',(p.get('id'),)).fetchone()
             if not row or row['state']!='ready' or not cfg['enabled'] or row['channel'] not in json.loads(cfg['channels']):raise ValueError('Sending is paused or this prospect is not ready.')
             if instant()-datetime.fromisoformat(row['checked_at'].replace('Z','+00:00'))>timedelta(hours=24):raise ValueError('Source evidence is too old; research again.')
-            qualification(row['qualification'])
+            qualification(row['qualification'],row['website'],row['profile_url'],row['location'])
             recent_source(row['source_published_at'])
+            intelligence.message_review(dict(message=row['message'],message_review=json.loads(row['message_review']),variant=row['variant']))
             clear_history(con,existing_lead(con,dict(row)))
             run_attempts=con.execute("SELECT COUNT(*) FROM crm_ai_prospects WHERE run_id=? AND attempted_at IS NOT NULL",(p['run_id'],)).fetchone()[0]
             window_attempts=sum(datetime.fromisoformat(r['attempted_at'])>instant()-timedelta(minutes=30) for r in con.execute('SELECT attempted_at FROM crm_ai_prospects WHERE attempted_at IS NOT NULL'))
@@ -224,7 +248,8 @@ def action(p):
                 if classification in ('Interested','Booking requested'):
                     con.execute("UPDATE crm_leads SET stage='Prospect',status=CASE WHEN status IN ('New','Contacted') THEN 'Follow-up' ELSE status END,updated_at=?,revision=revision+1 WHERE id=? AND status NOT IN ('Won','Lost')",(stamp(),row['lead_id']))
             if classification=='Not interested':con.execute("UPDATE crm_ai_prospects SET state='stopped',stop_reason='Not interested / do not contact again' WHERE id=?",(row['id'],))
-            return dict(ok=True)
+            result=intelligence.inbound(con,p,row)
+            return dict(ok=True,message_id=result['id'],state=result['state'])
         if op=='skip':
             con.execute("UPDATE crm_ai_prospects SET state='stopped',stop_reason='Skipped by Michael' WHERE id=? AND state='ready'",(p.get('id'),));return dict(ok=True)
         if op=='control-link':

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""launchd wakes every minute; the CRM leases research/DM runs every 30 minutes."""
+"""Active Mac-session daemon checks every minute; CRM leases 30-minute outreach runs."""
 import fcntl
 import json
 import os
