@@ -55,6 +55,20 @@ def closer_questionnaire():
 def leads():
     return jsonify(leads=store.list_leads())
 
+@app.get('/api/outreach-inbox')
+def outreach_inbox():
+    import crm_outreach_inbox
+    return jsonify(crm_outreach_inbox.snapshot(outreach_operator()))
+
+@app.post('/api/outreach-inbox/<int:n>/read')
+def outreach_read(n):
+    import crm_outreach_inbox
+    try:
+        p=request.get_json(silent=True) or {}
+        crm_outreach_inbox.mark_read(n,p.get('sequence'))
+        return jsonify(ok=True)
+    except (ValueError,TypeError) as e:return jsonify(error=str(e)),400
+
 @app.get('/api/leads/<int:n>/notes')
 def notes(n):
     return jsonify(notes=store.notes_for(n))

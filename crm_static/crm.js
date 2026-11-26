@@ -1,6 +1,7 @@
 const $ = q => document.querySelector(q);
 const form = $('#lead-form'), modal = $('#editor');
 let pipeline = ['outreach','customers','calendar','followups','stats','system'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'prospects';
+let inboxRows=[], inboxView='all', inboxRefreshBusy=false;
 let leads = [], view = 'open', editing = null, baseline = '', busy = false;
 const el = (tag, cls, text) => { const n = document.createElement(tag); n.className = cls; if (text != null) n.textContent = text; return n; };
 const today = () => new Intl.DateTimeFormat('en-CA', {timeZone:'Etc/GMT+7', year:'numeric', month:'2-digit', day:'2-digit'}).format(new Date());
@@ -17,10 +18,15 @@ async function api(path, options = {}) {
 function render() {
   const root = $('#lead-list'); root.replaceChildren();
   const query = $('#search').value.trim().toLowerCase();
-  const pool = leads.filter(l => pipeline === 'followups' ? (!!l.follow_up || l.status==='Follow-up') && !closed(l) && l.status !== 'Call booked' : pipeline === 'outreach' ? l.stage === 'Outreach' && !closed(l) : pipeline === 'customers' ? l.status === 'Won' : l.stage === 'Prospect' || closed(l));
+  const source=pipeline==='outreach'?inboxRows:leads;
+  const pool = source.filter(l => pipeline === 'followups' ? (!!l.follow_up || l.status==='Follow-up') && !closed(l) && l.status !== 'Call booked' : pipeline === 'outreach' ? true : pipeline === 'customers' ? l.status === 'Won' : l.stage === 'Prospect' || closed(l));
   if(pipeline==='followups')pool.sort((a,b)=>(a.follow_up||'9999-12-31').localeCompare(b.follow_up||'9999-12-31')||a.company.localeCompare(b.company));
   let shown = pool.filter(l => (['customers','followups','outreach'].includes(pipeline) ? true : view === 'open' ? !closed(l) : view === 'new' ? !closed(l) && !l.seen_at : view === 'due' ? due(l) : closed(l)) && (!query || [l.company,l.contact,l.phone,l.email,l.need,l.location,l.instagram,l.contact_method,l.contact_account].join(' ').toLowerCase().includes(query)));
   $('#outreach-filters').hidden = pipeline !== 'outreach';
+  $('#outreach-inbox-tabs').hidden = pipeline !== 'outreach';
+  $('#outreach-freshness').hidden = pipeline !== 'outreach';
+  $('#outreach-check-now').hidden = pipeline !== 'outreach';
+  if(pipeline==='outreach') shown=shown.filter(l=>inboxView==='all'?l.conversation_state!=='Closed':l.conversation_state===inboxView);
   if(pipeline==='outreach') shown=OutreachList.select(shown, {
     platform:$('#outreach-platform').value,status:$('#outreach-status').value,
     from:$('#outreach-from').value,to:$('#outreach-to').value,sort:$('#outreach-sort').value
@@ -29,7 +35,7 @@ function render() {
   $('#new-count').textContent = fresh || '';
   $('#pipeline-title').textContent = pipeline === 'followups' ? 'Follow-ups' : pipeline === 'outreach' ? 'Outreach' : pipeline === 'customers' ? 'Customers' : 'Active prospects';
   $('#lead-filters').hidden = pipeline !== 'prospects';
-  $('#summary').textContent = pipeline === 'followups' ? `${pool.filter(l=>l.follow_up).length} scheduled · ${pool.filter(l=>!l.follow_up).length} without a date · ${pool.filter(due).length} due or overdue` : pipeline === 'outreach' ? `${shown.length} of ${pool.length} companies · ${pool.filter(l=>OutreachList.day(l.last_contacted_at)).length} with contact dates` : pipeline === 'customers' ? `${pool.length} customers` : `${pool.filter(l=>!closed(l)).length} active · ${pool.filter(due).length} to follow up`;
+  $('#summary').textContent = pipeline === 'followups' ? `${pool.filter(l=>l.follow_up).length} scheduled · ${pool.filter(l=>!l.follow_up).length} without a date · ${pool.filter(due).length} due or overdue` : pipeline === 'outreach' ? `${shown.length} of ${pool.length} conversations · ${pool.filter(l=>l.new_reply).length} new replies · ${pool.filter(l=>l.conversation_state==='Needs reply').length} need reply` : pipeline === 'customers' ? `${pool.length} customers` : `${pool.filter(l=>!closed(l)).length} active · ${pool.filter(due).length} to follow up`;
   if (!shown.length) {
     const box = el('div', 'empty');
     box.append(el('h2','',!leads.length ? 'Add your first lead.' : 'Nothing here right now.'),el('p','',!leads.length ? 'Put in their details and a few notes. Your closer can take it from there.' : 'Try another filter or search.'));
@@ -44,19 +50,45 @@ function render() {
     left.append(name,el('div','sub',[lead.location,lead.contact,contact].filter(Boolean).join(' · ') || 'Open to view details'));
     if (lead.contact_method) left.append(el('div','contact-trail',[lead.contact_method,lead.contact_account ? 'from '+(['Instagram DM','Facebook DM'].includes(lead.contact_method)?'@':'')+lead.contact_account.replace(/^@/,'') : '',pipeline === 'outreach' ? '' : (lead.last_contacted_at ? OutreachList.label(lead.last_contacted_at) : '')].filter(Boolean).join(' · ')));
     if(pipeline==='outreach') {
+      if(lead.new_reply) name.prepend(el('span','reply-dot'));
+      if(lead.last_message) left.append(el('div','message-preview',(lead.last_message.direction==='inbound'?'Them: ':'You: ')+lead.last_message.text));
+      left.append(el('div','contact-trail','Latest activity: '+activityLabel(lead.last_activity_at)));
       left.append(el('div','contact-date'+(OutreachList.day(lead.last_contacted_at)?'':' unknown'),'Last contacted: '+OutreachList.label(lead.last_contacted_at)));
       left.append(el('div','sub','Added: '+OutreachList.label(lead.created_at)));
       if(lead.follow_up) left.append(el('div','contact-trail','Follow up: '+OutreachList.label(lead.follow_up)));
     }
     const right = el('div','lead-right');
+    if(pipeline==='outreach') {
+      if(lead.new_reply) right.append(el('span','badge new-reply','New reply'));
+      right.append(el('span','badge'+(lead.conversation_state==='Needs reply'?' needs-reply':''),lead.conversation_state));
+    }
     if (due(lead)) right.append(el('span','due',lead.follow_up === today() ? 'Follow up today' : 'Follow-up overdue'));
     if (pipeline==='followups')right.append(el('span','followup-date',lead.follow_up?new Date(lead.follow_up+'T12:00:00Z').toLocaleDateString('en-US',{timeZone:'UTC',month:'short',day:'numeric',year:'numeric'}):'No date set'));
-    right.append(el('span','badge' + (lead.status === 'Call booked' ? ' booked' : lead.status === 'Won' ? ' won' : ''),lead.status),el('span','chevron','›'));
+    right.append(el('span','badge' + (lead.status === 'Call booked' ? ' booked' : lead.status === 'Won' ? ' won' : ''),pipeline==='outreach'?(lead.contact_method||'Platform not recorded'):lead.status),el('span','chevron','›'));
     row.append(left,right); row.onclick = () => openLead(lead); root.append(row);
   }
 }
+function activityLabel(value) {
+  if(!value) return 'Not recorded';
+  if(value.length===10) return OutreachList.label(value);
+  const date=new Date(value);return Number.isNaN(date.getTime())?'Not recorded':new Intl.DateTimeFormat('en-US',{timeZone:'America/Vancouver',dateStyle:'medium',timeStyle:'short'}).format(date)+' Vancouver';
+}
+async function refreshInbox() {
+  if(inboxRefreshBusy)return;
+  inboxRefreshBusy=true;
+  try {
+    const data=await api('/api/outreach-inbox');inboxRows=data.conversations;
+    $('#outreach-check-now').disabled=!data.operator||data.check_queued||data.check_running;
+    $('#outreach-check-now').textContent=data.check_running?'Checking DMs…':data.check_queued?'DM check queued':'Check DMs';
+    $('#outreach-check-now').title=data.operator?'Read-only check through your connected Mac. Does not enable scheduled outreach.':'Connect the owner session under Outreach System to request a DM check.';
+    const checks=inboxRows.filter(l=>l.last_checked_at).map(l=>l.last_checked_at).sort();
+    $('#outreach-freshness').textContent='CRM refreshed '+activityLabel(data.checked_at)+'. '+(checks.length?'Most recent DM check: '+activityLabel(checks.at(-1))+'. ':'No DM checks recorded yet. ')+'Refreshing this page does not check the social inboxes.'+(data.check_queued?' DM check queued; waiting for the Mac worker.':'')+(data.check_running?' A read-only DM check is running.':'');
+    if(pipeline==='outreach')render();
+  } catch(e){$('#outreach-freshness').textContent='Could not refresh conversations: '+e.message;}
+  finally{inboxRefreshBusy=false;}
+}
 async function load() {
-  try { leads = (await api('/api/leads')).leads; render(); renderCalendar(); document.dispatchEvent(new Event('crm-leads-updated')); $('#error').hidden = true; $('#sync').textContent = 'Saved on your shared CRM.'; }
+  try { leads = (await api('/api/leads')).leads; render(); renderCalendar(); await refreshInbox(); document.dispatchEvent(new Event('crm-leads-updated')); $('#error').hidden = true; $('#sync').textContent = 'Saved on your shared CRM.'; }
   catch(e) { $('#error').textContent = e.message; $('#error').hidden = false; }
 }
 function callFields() {
@@ -68,7 +100,22 @@ function callFields() {
   $('#show-email').hidden = !editing?.call_start_utc;
 }
 async function openLead(lead = null) {
-  editing = lead; form.reset(); $('#form-error').hidden = true; $('#history').replaceChildren();
+  editing = lead; form.reset();
+  $('#outreach-conversation').hidden=true; $('#conversation-messages').replaceChildren();
+  if(lead?.conversation) {
+    $('#outreach-conversation').hidden=false;
+    $('#conversation-check').textContent='Last DM check: '+activityLabel(lead.last_checked_at);
+    for(const message of lead.conversation) {
+      const item=el('div','conversation-message '+message.direction);
+      item.append(el('small','',(message.direction==='inbound'?'Them':'You')+' · '+activityLabel(message.at)+' · '+message.state),el('p','',message.text));
+      $('#conversation-messages').append(item);
+    }
+    if(!lead.conversation.length) $('#conversation-messages').append(el('p','booking-hint','No captured messages yet. Earlier outreach details may be in the notes below.'));
+    if(lead.new_reply) {
+      try {await api('/api/outreach-inbox/'+lead.id+'/read',{method:'POST',body:JSON.stringify({sequence:lead.inbound_sequence})});lead.new_reply=false;render();}
+      catch(e){$('#conversation-check').textContent+=' · Could not mark read: '+e.message;}
+    }
+  } $('#form-error').hidden = true; $('#history').replaceChildren();
   $('#editor-title').textContent = lead ? lead.company : 'Add lead';
   $('#status-field').hidden = !lead; $('#update-fields').hidden = !lead;
   for (const name of ['company','contact','phone','email','need','follow_up','status','call_date','call_time','call_zone','zoom_url','instagram','location','stage','contact_method','contact_account']) field(name).value = lead?.[name] || (name === 'stage' ? (pipeline === 'outreach' ? 'Outreach' : 'Prospect') : name === 'status' ? 'New' : name === 'call_zone' ? 'Eastern' : '');
@@ -80,7 +127,7 @@ async function openLead(lead = null) {
   if (lead?.call_time) { const match = lead.call_time.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i); if (match) field('call_time').value = String(match[3] ? (+match[1] % 12) + (match[3].toUpperCase() === 'PM' ? 12 : 0) : +match[1]).padStart(2,'0') + ':' + match[2]; }
   $('#seen').hidden = !lead || lead.stage === 'Outreach' || !!lead.seen_at || $('#person').value !== 'Closer';
   $('#seen').disabled = false; $('#seen').textContent = 'Mark as seen by closer';
-  callFields(); baseline = snapshot(); modal.showModal(); field('company').focus();
+  callFields(); baseline = snapshot(); modal.showModal(); (lead?.conversation?$('#outreach-conversation'):field('company')).focus();
   if (lead) {
     try {
       const data = await api(`/api/leads/${lead.id}/notes`);
@@ -100,9 +147,16 @@ $('#search').oninput = render;
 for(const id of ['outreach-platform','outreach-status','outreach-from','outreach-to','outreach-sort']) $('#'+id).onchange=render;
 $('#outreach-clear').onclick=()=>{
   for(const id of ['outreach-platform','outreach-status','outreach-from','outreach-to']) $('#'+id).value='';
-  $('#outreach-sort').value='newest'; $('#search').value=''; render();
+  $('#outreach-sort').value='activity'; inboxView='all'; document.querySelectorAll('[data-inbox]').forEach(b=>b.classList.toggle('selected',b.dataset.inbox==='all')); $('#search').value=''; render();
 };
 $('#refresh').onclick = load;
+$('#outreach-check-now').onclick=async()=>{
+  $('#outreach-check-now').disabled=true;
+  try{await api('/api/outreach-system',{method:'POST',body:JSON.stringify({op:'request-inbox-check'})});await refreshInbox();}
+  catch(e){$('#outreach-freshness').textContent='Could not request DM check: '+e.message;$('#outreach-check-now').disabled=false;}
+};
+document.querySelectorAll('[data-inbox]').forEach(button=>button.onclick=()=>{inboxView=button.dataset.inbox;document.querySelectorAll('[data-inbox]').forEach(b=>b.classList.toggle('selected',b===button));render();});
+setInterval(()=>{if(pipeline==='outreach'&&!document.hidden)refreshInbox();},15000);
 $('#person').value = localStorage.getItem('bmt-person') === 'Closer' ? 'Closer' : 'Michael';
 $('#person').onchange = () => localStorage.setItem('bmt-person',$('#person').value);
 document.querySelectorAll('[data-view]').forEach(button => button.onclick = () => {
@@ -231,6 +285,7 @@ function showPage(page) {
   $('#leads-page').hidden=['calendar','stats','system'].includes(page);$('#calendar-page').hidden=page!=='calendar';$('#stats-page').hidden=page!=='stats';$('#system-page').hidden=page!=='system';
   for (const [id,name] of [['nav-outreach','outreach'],['nav-leads','prospects'],['nav-customers','customers'],['nav-calendar','calendar'],['nav-followups','followups'],['nav-stats','stats'],['nav-system','system']]) $('#'+id).classList.toggle('active',page===name);
   document.querySelectorAll('[data-view]').forEach(b=>b.classList.toggle('selected',b.dataset.view==='open'));
+  if(page==='outreach')refreshInbox();
   if(page==='calendar')renderCalendar();else if(page==='stats')document.dispatchEvent(new Event('crm-stats-open'));else if(page==='system')document.dispatchEvent(new Event('crm-system-open'));else render();
 }
 for (const [id,page] of [['nav-outreach','outreach'],['nav-leads','prospects'],['nav-customers','customers'],['nav-calendar','calendar'],['nav-followups','followups'],['nav-stats','stats'],['nav-system','system']]) $('#'+id).onclick=()=>{location.hash=page;showPage(page)};

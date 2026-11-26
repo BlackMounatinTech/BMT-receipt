@@ -32,6 +32,12 @@ def maintain_run(process,prompt,timeout=1100,heartbeat_seconds=60):
 
 def prepare_prompt(template,claim):
     mode=claim.get('mode','research')
+    if mode=='check':
+        return ('READ-ONLY MANUAL DM CHECK. No messages, replies, cold outreach, purchases or scheduling. Do not enable automation. Use only native cua_repl, one existing tab per Facebook/Instagram/Skool. Preserve drafts. '
+          'Read the CRM inbox with the configured client authentication at /api/outreach-inbox (public GET); also read client.py get for channel access/issues. Check every open tracked conversation, including manually contacted legacy leads. CRM lead notes have conversation/profile links. Read the live thread, verify company and speaker. '
+          'For each successfully inspected lead, post through client.py op=inbox-check-result, run_id={{RUN_ID}}, lead_id, channel Facebook/Instagram/Skool, source_url (verified thread/profile), proof (what was actually checked), and messages (array of NEW inbound messages only, each text, classification Interested/Booking requested/Question/Not interested/Auto-reply/Other and external_key from stable platform identity where available). Do not record our outgoing messages as inbound. Empty messages is valid after an actual check. Duplicate checks must not duplicate replies. '
+          'Do not mark a failed/unreadable thread checked. Log access issues through existing channel-issue workflow, leave backlog explicit. Finish with checked count/new replies/unreachable conversations. Never claim all checked when time expires. Stop after {{WORK_MINUTES}} minutes. '
+          'Read the workflow below for client command, run ID and platform guardrails; its sending/reply instructions are overridden by this read-only mode.\n'+template).replace('{{WORK_MINUTES}}',str(claim.get('work_minutes',12))).replace('{{RUN_ID}}',claim.get('run',''))
     if mode=='replies':
         start=template.index('\nWORKFLOW\n');end=template.index('\nREPLY HANDLING',start)
         template=template[:start]+template[end:]

@@ -265,6 +265,7 @@ def dispatch(con,p,owner=False):
             incoming=con.execute('SELECT rowid FROM crm_ai_messages WHERE id=?',(row['reply_to'],)).fetchone()
             con.execute("UPDATE crm_ai_messages SET state='answered' WHERE prospect_id=? AND direction='inbound' AND state='received' AND rowid<=?",(row['prospect_id'],incoming['rowid']))
             company=prospect(con,{'id':row['prospect_id']})
+            if company['lead_id']:con.execute('UPDATE crm_leads SET last_contacted_at=?,updated_at=?,revision=revision+1 WHERE id=?',(api.stamp(),api.stamp(),company['lead_id']))
             if company['lead_id']:con.execute('INSERT INTO crm_notes(lead_id,author,text,created_at) VALUES(?,?,?,?)',(company['lead_id'],'Michael','Outreach reply sent\n'+row['source_url']+'\n'+row['text'],api.stamp()))
         else:con.execute("UPDATE crm_ai_config SET enabled=0,worker_state='Paused: reply send needs review' WHERE id=1")
         return dict(ok=True)

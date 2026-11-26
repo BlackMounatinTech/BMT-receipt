@@ -2,7 +2,7 @@
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="csrf" content="{{ csrf }}"><title>BMT CRM</title>
-<link rel="stylesheet" href="/crm-assets/crm.css?v=outreach-dates-2">
+<link rel="stylesheet" href="/crm-assets/crm.css?v=outreach-inbox-3">
 </head><body>
 <header><a class="brand" href="/">BMT <span>CRM</span></a><nav class="main-nav" aria-label="Main navigation"><button id="nav-calling">Calling</button><button id="nav-followups">Follow-ups</button><button id="nav-outreach">Outreach</button><button id="nav-system">Outreach System</button><button id="nav-leads" class="active">Active prospects</button><button id="nav-customers">Customers</button><button id="nav-calendar">Calendar</button><button id="nav-stats">Stats</button></nav><div class="header-right"><div class="call-counter" aria-label="Calls, booked meetings and closes"><div aria-live="polite"><span><strong id="calls-today">—</strong> Today</span><span><strong id="calls-total">—</strong> Overall</span><span title="Companies with a booked meeting, including those subsequently won"><strong id="meetings-booked">—</strong> Booked</span><span title="Deals marked Won"><strong id="deals-closed">—</strong> Closes</span></div><button id="new-call-day" title="Reset today’s count; keep the overall total">New day</button><small id="counter-error" role="status" hidden></small></div><label class="person">Using as <select id="person"><option>Michael</option><option>Closer</option></select></label><a class="tools" href="/tools/?view=tools">Tools ↗</a></div></header>
 <aside id="outreach-health-banner" class="outreach-alert-banner" role="status" aria-live="polite" hidden></aside>
@@ -45,11 +45,14 @@
 <main id="leads-page">
  <div class="title-row"><div><h1 id="pipeline-title">Active prospects</h1><p id="summary">Loading your leads…</p></div><button id="add" class="primary">+ Add lead</button></div>
  <div class="list-toolbar"><div id="lead-filters" class="tabs" role="group" aria-label="Filter leads"><button class="selected" data-view="open">Open</button><button data-view="new">New <span id="new-count"></span></button><button data-view="due">Follow-ups</button><button data-view="closed">Closed</button></div><input id="search" type="search" placeholder="Search leads" aria-label="Search leads"></div>
+ <div id="outreach-inbox-tabs" class="tabs inbox-tabs" hidden><button data-inbox="all" class="selected">All</button><button data-inbox="Needs reply">Needs reply</button><button data-inbox="Waiting on them">Waiting on them</button><button data-inbox="Meeting booked">Meeting booked</button><button data-inbox="Closed">Closed</button></div>
+ <button id="outreach-check-now" type="button" hidden>Check DMs</button>
+ <p id="outreach-freshness" class="booking-hint" hidden></p>
  <div id="outreach-filters" class="outreach-filters" hidden>
   <label>Platform<select id="outreach-platform"><option value="">All platforms</option><option>Facebook DM</option><option>Instagram DM</option><option>Skool DM</option><option>Email</option><option>Phone</option><option value="unknown">Not recorded</option></select></label>
   <label>Status<select id="outreach-status"><option value="">All statuses</option><option>New</option><option>Contacted</option><option>Follow-up</option></select></label>
   <label>Contacted from<input id="outreach-from" type="date"></label><label>Through<input id="outreach-to" type="date"></label>
-  <label>Sort<select id="outreach-sort"><option value="newest">Newest contact first</option><option value="oldest">Oldest contact first</option><option value="company">Company A–Z</option><option value="followup">Next follow-up first</option></select></label>
+  <label>Sort<select id="outreach-sort"><option value="activity">Latest conversation first</option><option value="newest">Newest contact first</option><option value="oldest">Oldest contact first</option><option value="company">Company A–Z</option><option value="followup">Next follow-up first</option></select></label>
   <button id="outreach-clear" type="button">Clear filters</button>
  </div>
  <p id="error" role="alert" hidden></p>
@@ -86,6 +89,7 @@
 <dialog id="editor" aria-labelledby="editor-title">
  <form id="lead-form">
   <div class="dialog-heading"><h2 id="editor-title">Add lead</h2><button type="button" id="close" class="close" aria-label="Close">×</button></div>
+  <section id="outreach-conversation" tabindex="-1" hidden><h3>Conversation</h3><p id="conversation-check" class="booking-hint"></p><div id="conversation-messages"></div><p class="booking-hint">Opening clears the new-reply badge. Needs reply stays until answered. Replies are sent through the connected outreach workflow.</p></section>
   <label>Company<input name="company" required maxlength="200" placeholder="Company name" autocomplete="organization"></label>
   <div class="pair"><label>Contact<input name="contact" maxlength="200" placeholder="Their name" autocomplete="name"></label><label>Phone<input name="phone" type="tel" maxlength="80" placeholder="Phone number" autocomplete="tel"></label></div>
   <div class="pair"><label>Keep in<select name="stage"><option value="Cold">Calling list</option><option value="Outreach">Outreach</option><option value="Prospect">Active prospects</option></select></label><label>Location<input name="location" maxlength="200" placeholder="City, state"></label></div>
@@ -106,11 +110,11 @@
  </form>
 </dialog>
 <dialog id="email-dialog" aria-labelledby="email-title"><div class="dialog-heading"><h2 id="email-title">Appointment email</h2><button id="close-email" class="close" aria-label="Close appointment email">×</button></div><p id="email-to"></p><label>Customer email<input id="booking-correct-email" type="email" maxlength="250" autocomplete="email"></label><button id="correct-booking-email" type="button">Save email &amp; resend booking</button><p class="booking-hint">Updates the calendar invitation and resends the confirmation using the same time and Zoom link.</p><strong id="email-subject"></strong><pre id="email-body"></pre><p id="email-state" role="status"></p><p class="booking-hint">A reminder with the Zoom link goes out 24 hours before the call. Calls booked inside 24 hours receive the confirmation only.</p><p id="email-error" role="alert" hidden></p><div class="dialog-actions"><button id="confirm-reply">Mark confirmed after reply</button><button id="send-email" class="primary">Send confirmation</button></div></dialog>
-<script src="/crm-assets/outreach_list.js?v=outreach-dates-2"></script>
-<script src="/crm-assets/crm.js?v=outreach-dates-2"></script>
+<script src="/crm-assets/outreach_list.js?v=outreach-inbox-3"></script>
+<script src="/crm-assets/crm.js?v=outreach-inbox-3"></script>
 <script src="/crm-assets/lead_time.js?v=1"></script>
 <script src="/crm-assets/business_hours.js?v=1"></script>
 <script src="/crm-assets/stats.js?v=outreach-system-1"></script>
-<script src="/crm-assets/outreach_system.js?v=outreach-dates-2"></script>
+<script src="/crm-assets/outreach_system.js?v=outreach-inbox-3"></script>
 <script src="/crm-assets/calling.js?v=outreach-system-1"></script>
 </body></html>

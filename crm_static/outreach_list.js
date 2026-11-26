@@ -14,12 +14,16 @@ const OutreachList = (() => {
     const date = day(value);
     return date ? new Intl.DateTimeFormat('en-US', {timeZone:'UTC',month:'short',day:'numeric',year:'numeric'}).format(new Date(date+'T12:00:00Z')) : 'Date not recorded';
   }
-  function select(rows, {platform='',status='',from='',to='',sort='newest'}={}) {
+  function select(rows, {platform='',status='',from='',to='',sort='activity'}={}) {
     const result=rows.filter(l=>(!platform || (platform==='unknown' ? !l.contact_method : l.contact_method===platform)) && (!status || l.status===status) && (!from || day(l.last_contacted_at)>=from) && (!to || (day(l.last_contacted_at) && day(l.last_contacted_at)<=to)));
     result.sort((a,b)=>{
       const name=()=>a.company.localeCompare(b.company) || a.id-b.id;
       if(sort==='company') return name();
       if(sort==='followup') return (a.follow_up||'9999-12-31').localeCompare(b.follow_up||'9999-12-31') || name();
+      if(sort==='activity') {
+        const activity=l=>Date.parse(l.last_activity_at||l.last_contacted_at||'')||0;
+        return activity(b)-activity(a)||name();
+      }
       const x=day(a.last_contacted_at),y=day(b.last_contacted_at);
       if(!x || !y) return x ? -1 : y ? 1 : name();
       return (sort==='oldest' ? x.localeCompare(y) : y.localeCompare(x)) || name();

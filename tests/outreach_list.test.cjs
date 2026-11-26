@@ -10,3 +10,9 @@ test('sorts contacts newest or oldest with missing dates always last; does not m
 test('combines platform, status and inclusive date range; unknown date is excluded',()=>{
  assert.deepEqual(list.select(rows,{platform:'Facebook DM',status:'Contacted',from:'2026-11-24',to:'2026-11-24'}).map(l=>l.id),[1]);assert.deepEqual(list.select(rows,{to:'2026-11-24'}).map(l=>l.id),[1]);assert.deepEqual(list.select(rows,{sort:'followup'}).map(l=>l.id),[3,1,2]);
 });
+
+test('latest conversation activity takes precedence over original contact date',()=>{
+ const a={id:1,company:'A',last_contacted_at:'2026-11-20',last_activity_at:'2026-11-26T20:00:00Z'};
+ const b={id:2,company:'B',last_contacted_at:'2026-11-25',last_activity_at:'2026-11-26T19:59:59Z'};
+ assert.deepEqual(list.select([b,a]).map(l=>l.id),[1,2]);
+});

@@ -13,7 +13,7 @@ import crm_outreach_health as health
 CHANNELS=('Facebook','Instagram','Skool')
 TRADES=('Concrete','Excavation','Landscaping','Decks and fences')
 RUN_LIMITS={'research':dict(work_minutes=40,timeout_seconds=2700,lease_minutes=50),
-            'replies':dict(work_minutes=8,timeout_seconds=600,lease_minutes=12)}
+            'replies':dict(work_minutes=8,timeout_seconds=600,lease_minutes=12),'check':dict(work_minutes=12,timeout_seconds=900,lease_minutes=17)}
 LOCAL=timezone(timedelta(hours=-7))
 
 def schema(con):
@@ -46,6 +46,8 @@ def schema(con):
       observed_at TEXT NOT NULL, text TEXT NOT NULL, classification TEXT NOT NULL, source_url TEXT NOT NULL,
       suggested_reply TEXT NOT NULL, UNIQUE(prospect_id,text))''')
     con.execute('''CREATE TABLE IF NOT EXISTS crm_ai_control_links (token_hash TEXT PRIMARY KEY, expires TEXT NOT NULL)''')
+    if 'manual_check' not in {r['name'] for r in con.execute('PRAGMA table_info(crm_ai_config)')}:
+        con.execute('ALTER TABLE crm_ai_config ADD COLUMN manual_check INTEGER NOT NULL DEFAULT 0')
     calling.schema(con)
     import crm_stats
     crm_stats.schema(con)
@@ -223,6 +225,8 @@ def action(p,owner=False):
             con.execute('UPDATE '+table+" SET state='sending' WHERE id=?",(row['id'],))
             reviewed=True;op='send-result' if kind=='intro' else 'reply-result'
             p=dict(op=op,id=row['id'],message_id=row['id'],state='sent',proof=proof)
+        if op in ('begin-send','begin-reply') and p.get('run_id') and live_run(con,p['run_id'])['mode']=='check':
+            raise ValueError('This is a read-only inbox check; sending is disabled.')
         if op in ('candidate','refresh-candidate','begin-send','research','source'):
             active=live_run(con,p.get('run_id'))
             if active['mode']!='research':raise ValueError('This is an inbox-only check; new research and introductions wait for the research run.')
@@ -246,8 +250,20 @@ def action(p,owner=False):
         if op=='heartbeat':
             con.execute('UPDATE crm_ai_config SET heartbeat=?,worker_state=CASE WHEN enabled=1 THEN ? ELSE worker_state END WHERE id=1',(stamp(),short(p,'state',300)))
             return dict(ok=True)
+        if op=='request-inbox-check':
+            cfg=config(con)
+            con.execute('UPDATE crm_ai_config SET manual_check=1 WHERE id=1')
+            return dict(ok=True,queued=True,worker_connected=bool(cfg['heartbeat'] and instant()-datetime.fromisoformat(cfg['heartbeat'])<timedelta(minutes=3)))
+        if op=='inbox-check-result':
+            import crm_outreach_inbox
+            return crm_outreach_inbox.record_check(con,p)
         if op=='claim':
             cfg=config(con)
+            if cfg['manual_check'] and not con.execute("SELECT 1 FROM crm_ai_runs WHERE state='running'").fetchone():
+                ident=secrets.token_hex(16);limits=RUN_LIMITS['check']
+                con.execute("INSERT INTO crm_ai_runs(id,started_at,state,mode,lease_until) VALUES(?,?,'running','check',?)",(ident,stamp(),(instant()+timedelta(minutes=limits['lease_minutes'])).isoformat()))
+                con.execute("UPDATE crm_ai_config SET manual_check=0,worker_state='Checking DMs (read only)' WHERE id=1")
+                return dict(run=ident,mode='check',work_minutes=limits['work_minutes'],timeout_seconds=limits['timeout_seconds'])
             if not cfg['enabled'] or (cfg['next_run'] and datetime.fromisoformat(cfg['next_run'])>instant()) or con.execute("SELECT 1 FROM crm_ai_runs WHERE state='running'").fetchone():return dict(run=None)
             now=instant();mode='research' if not cfg['next_research'] or datetime.fromisoformat(cfg['next_research'])<=now else 'replies'
             limits=RUN_LIMITS[mode];ident=secrets.token_hex(16)
@@ -257,7 +273,9 @@ def action(p,owner=False):
             con.execute('UPDATE crm_ai_config SET next_run=?,next_research=?,worker_state=? WHERE id=1',(check_at,research_at,'Researching and checking replies' if mode=='research' else 'Checking replies'))
             return dict(run=ident,mode=mode,work_minutes=limits['work_minutes'],timeout_seconds=limits['timeout_seconds'])
         if op=='finish':
-            live_run(con,p.get('run_id'));summary=short(p,'summary',4000)
+            finished_run=live_run(con,p.get('run_id'));summary=short(p,'summary',4000)
+            if finished_run['mode']=='check':
+                con.execute("UPDATE crm_ai_config SET worker_state=CASE WHEN enabled=0 THEN 'Paused; manual inbox check finished' ELSE 'Waiting for next check' END WHERE id=1")
             pending=con.execute("SELECT 1 FROM crm_ai_prospects WHERE run_id=? AND state='sending'",(p['run_id'],)).fetchone()
             if pending:
                 con.execute("UPDATE crm_ai_prospects SET state='unconfirmed',stop_reason='Run ended without send confirmation; inspect the thread.' WHERE run_id=? AND state='sending'",(p['run_id'],))
