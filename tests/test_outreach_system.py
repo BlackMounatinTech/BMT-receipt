@@ -29,7 +29,7 @@ class OutreachSystemTests(unittest.TestCase):
         self.post({'op':'settings','enabled':True})
         return self.post({'op':'claim'}).json['run']
     def candidate(self,run,name='Demo Concrete',site='https://democoncrete.example',phone='5555550100'):
-        return {'op':'candidate','run_id':run,'country':'USA','company':name,'location':'Phoenix, AZ','trade':'Concrete','channel':'Facebook','profile_url':'https://www.facebook.com/democoncrete','website':site,'phone':phone,'email':'','ad_url':'https://www.facebook.com/ads/library/?id=123','issue':'Generic ad links to general services.','improvement':'Test a driveway-specific quote path.','scale_evidence':'Installation crew and project portfolio on website.','evidence':'Observed active driveway ad today.','checked_at':store.now(),'source_published_at':store.now(),'message':'Hey, Michael from BMT. Open to a 15-minute Zoom call?'}
+        return {'op':'candidate','run_id':run,'country':'USA','qualification':{**{k:'Verified public business evidence for '+k for k in machine.QUALIFICATION},'usa_base_url':site+'/contact','usa_operations_url':site+'/projects'},'company':name,'location':'Phoenix, AZ','trade':'Concrete','channel':'Facebook','profile_url':'https://www.facebook.com/democoncrete','website':site,'phone':phone,'email':'','ad_url':'https://www.facebook.com/ads/library/?id=123','issue':'Generic ad links to general services.','improvement':'Test a driveway-specific quote path.','scale_evidence':'Installation crew and project portfolio on website.','evidence':'Observed active driveway ad today.','checked_at':store.now(),'source_published_at':store.now(),'message':'Hey, Michael from BMT. Open to a 15-minute Zoom call?'}
     def test_owner_session_secret_survives_server_restart(self):
         with patch.dict(os.environ,{'RENDER':'true'}), patch('os.path.ismount',return_value=True):
             with patch.dict(os.environ,{},clear=False):
@@ -131,3 +131,15 @@ class OutreachSystemTests(unittest.TestCase):
         second=self.post({'op':'claim'}).json['run']
         ident=self.post(self.candidate(second,'Another','https://another.example','5555550120')).json['id']
         self.assertEqual(self.post({'op':'begin-send','run_id':second,'id':ident},False).status_code,400)
+
+    def test_usa_and_every_qualification_box_are_required(self):
+        run=self.claim();p=self.candidate(run)
+        p['country']='Canada';self.assertEqual(self.post(p,False).status_code,400)
+        p['country']='USA'
+        for key in machine.QUALIFICATION:
+            incomplete={**p,'qualification':dict(p['qualification'])}
+            incomplete['qualification'].pop(key)
+            self.assertEqual(self.post(incomplete,False).status_code,400)
+        p['qualification']['usa_base_url']=''
+        self.assertEqual(self.post(p,False).status_code,400)
+        self.assertEqual(self.client.get('/api/outreach-system').json['prospects'],[])

@@ -25,7 +25,7 @@ def schema(con):
       evidence TEXT NOT NULL, checked_at TEXT NOT NULL, message TEXT NOT NULL, state TEXT NOT NULL,
       created_at TEXT NOT NULL, attempted_at TEXT, sent_at TEXT, send_proof TEXT, run_id TEXT, stop_reason TEXT)''')
     columns={r['name'] for r in con.execute('PRAGMA table_info(crm_ai_prospects)')}
-    for name,default in [('source_type','ad_issue'),('intent_quote',''),('intent_url',''),('intent_author',''),('source_published_at','')]:
+    for name,default in [('source_type','ad_issue'),('intent_quote',''),('intent_url',''),('intent_author',''),('source_published_at',''),('qualification','')]:
         if name not in columns:con.execute(f"ALTER TABLE crm_ai_prospects ADD COLUMN {name} TEXT NOT NULL DEFAULT '{default}'")
     con.execute('''CREATE TABLE IF NOT EXISTS crm_ai_replies (id TEXT PRIMARY KEY, prospect_id TEXT NOT NULL,
       observed_at TEXT NOT NULL, text TEXT NOT NULL, classification TEXT NOT NULL, source_url TEXT NOT NULL,
@@ -100,9 +100,24 @@ def recent_source(value):
     if not valid:raise ValueError('The qualifying post, comment or ad must have a verified publication date within the last 30 days.')
 
 
+QUALIFICATION=('usa_base','usa_operations','trade_fit','advertising_need','scale_fit','identity_match','improvement_fit')
+
+def qualification(value):
+    if isinstance(value,str):
+        try:value=json.loads(value)
+        except (ValueError,TypeError):value=None
+    if not isinstance(value,dict):raise ValueError('Every qualification check requires saved evidence, including U.S. base and operations.')
+    clean={k:short(value,k,3000) for k in QUALIFICATION}
+    for key in ('usa_base','usa_operations'):
+        if not isinstance(value.get(key+'_url'),str):raise ValueError('Provide the public source verifying U.S. location and operations.')
+        clean[key+'_url']=url(value[key+'_url'],key+' evidence',allow_http=True)
+    return json.dumps(clean)
+
+
 def candidate(con,p):
     if p.get('country')!='USA' or p.get('trade') not in TRADES or p.get('channel') not in CHANNELS:
         raise ValueError('Only the approved USA contractor trades and outreach channels qualify.')
+    verified=qualification(p.get('qualification'))
     source=p.get('source_type','ad_issue')
     if source not in ('ad_issue','public_intent'):raise ValueError('Choose a valid prospect source.')
     intent_quote=short(p,'intent_quote',3000,source=='public_intent')
@@ -122,8 +137,8 @@ def candidate(con,p):
     if con.execute('SELECT 1 FROM crm_ai_prospects WHERE identity=?',(identity,)).fetchone():raise ValueError('This company is already in the outreach system.')
     lead=existing_lead(con,clean);clear_history(con,lead)
     ident=secrets.token_hex(16)
-    cols=['id','identity','lead_id','company','location','trade','channel','profile_url','website','phone','email','ad_url','issue','improvement','scale_evidence','evidence','checked_at','message','state','created_at','source_type','intent_quote','intent_url','intent_author','source_published_at']
-    values=[ident,identity,lead['id'] if lead else None,clean['company'],clean['location'],p['trade'],p['channel'],clean['profile_url'],clean['website'],clean['phone'],clean['email'],clean['ad_url'],clean['issue'],clean['improvement'],clean['scale_evidence'],clean['evidence'],clean['checked_at'],clean['message'],'ready',stamp(),source,intent_quote,intent_url,intent_author,published]
+    cols=['id','identity','lead_id','company','location','trade','channel','profile_url','website','phone','email','ad_url','issue','improvement','scale_evidence','evidence','checked_at','message','state','created_at','source_type','intent_quote','intent_url','intent_author','source_published_at','qualification']
+    values=[ident,identity,lead['id'] if lead else None,clean['company'],clean['location'],p['trade'],p['channel'],clean['profile_url'],clean['website'],clean['phone'],clean['email'],clean['ad_url'],clean['issue'],clean['improvement'],clean['scale_evidence'],clean['evidence'],clean['checked_at'],clean['message'],'ready',stamp(),source,intent_quote,intent_url,intent_author,published,verified]
     con.execute('INSERT INTO crm_ai_prospects ('+','.join(cols)+') VALUES ('+','.join('?' for _ in cols)+')',values)
     return dict(id=ident,state='ready')
 
@@ -165,6 +180,7 @@ def action(p):
             row=con.execute('SELECT * FROM crm_ai_prospects WHERE id=?',(p.get('id'),)).fetchone()
             if not row or row['state']!='ready' or not cfg['enabled'] or row['channel'] not in json.loads(cfg['channels']):raise ValueError('Sending is paused or this prospect is not ready.')
             if instant()-datetime.fromisoformat(row['checked_at'].replace('Z','+00:00'))>timedelta(hours=24):raise ValueError('Source evidence is too old; research again.')
+            qualification(row['qualification'])
             recent_source(row['source_published_at'])
             clear_history(con,existing_lead(con,dict(row)))
             run_attempts=con.execute("SELECT COUNT(*) FROM crm_ai_prospects WHERE run_id=? AND attempted_at IS NOT NULL",(p['run_id'],)).fetchone()[0]
