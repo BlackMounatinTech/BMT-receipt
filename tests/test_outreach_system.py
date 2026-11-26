@@ -124,7 +124,7 @@ class OutreachSystemTests(unittest.TestCase):
         run=self.claim();ident=self.post(self.candidate(run)).json['id']
         self.post({'op':'settings','enabled':False})
         self.assertEqual(self.post({'op':'begin-send','id':ident,'run_id':run},False).status_code,400)
-        with store.connect() as con:con.execute('UPDATE crm_ai_runs SET started_at=? WHERE id=?',((machine.instant()-timedelta(minutes=21)).isoformat(),run))
+        with store.connect() as con:con.execute('UPDATE crm_ai_runs SET lease_until=? WHERE id=?',((machine.instant()-timedelta(minutes=1)).isoformat(),run))
         data=self.client.get('/api/outreach-system').json
         self.assertEqual(data['runs'][0]['state'],'interrupted');self.assertFalse(data['config']['enabled'])
 
@@ -145,7 +145,7 @@ class OutreachSystemTests(unittest.TestCase):
             self.post({'op':'begin-send','run_id':run,'id':ident})
             self.post({'op':'send-result','id':ident,'state':'sent','proof':'Confirmed in test'})
         self.post({'op':'finish','run_id':run,'summary':'Two test sends.'})
-        with store.connect() as con:con.execute('UPDATE crm_ai_config SET next_run=NULL')
+        with store.connect() as con:con.execute("UPDATE crm_ai_config SET next_run=NULL,next_research=''")
         second=self.post({'op':'claim'}).json['run']
         ident=self.post(self.candidate(second,'Another','https://another.example','5555550120')).json['id']
         self.assertEqual(self.post({'op':'begin-send','run_id':second,'id':ident},False).status_code,400)
@@ -699,3 +699,29 @@ class OutreachSystemTests(unittest.TestCase):
         self.assertEqual(data['totals']['booked'],1);self.assertEqual(data['prospects'][0]['conversation_stage'],'Booked')
         self.assertEqual(data['intelligence']['funnel']['segments'][0]['booked'],1)
         self.assertEqual(__import__('crm_calling').call_counts()['total'],0)
+
+    def test_hourly_research_and_inbox_checks_are_separate_and_never_overlap(self):
+        run=self.claim();ready=self.post(self.candidate(run)).json['id']
+        self.assertIsNone(self.post({'op':'claim'}).json['run'])
+        self.post({'op':'finish','run_id':run,'summary':'Research finished; next hourly research remains scheduled.'})
+        with store.connect() as con:con.execute('UPDATE crm_ai_config SET next_run=NULL')
+        inbox=self.post({'op':'claim'}).json
+        self.assertEqual((inbox['mode'],inbox['work_minutes'],inbox['timeout_seconds']),('replies',8,600))
+        self.assertEqual(self.post({'op':'begin-send','id':ready,'run_id':inbox['run']},False).status_code,400)
+        self.assertEqual(self.post(self.candidate(inbox['run'],'Other','https://other.example','5555550102'),False).status_code,400)
+        self.assertIsNone(self.post({'op':'claim'}).json['run'])
+        self.post({'op':'finish','run_id':inbox['run'],'summary':'Inbox-only check complete; no new outreach attempted.'})
+        with store.connect() as con:con.execute("UPDATE crm_ai_config SET next_run=NULL,next_research='' ")
+        research=self.post({'op':'claim'}).json
+        self.assertEqual((research['mode'],research['work_minutes'],research['timeout_seconds']),('research',40,2700))
+        cfg=self.client.get('/api/outreach-system').json['config']
+        self.assertGreater(__import__('datetime').datetime.fromisoformat(cfg['next_research']),machine.instant()+timedelta(minutes=59))
+        self.assertLess(__import__('datetime').datetime.fromisoformat(cfg['next_run']),machine.instant()+timedelta(minutes=16))
+
+    def test_research_lease_supports_longer_work_but_still_expires(self):
+        run=self.claim();base=machine.instant()
+        with patch.object(machine,'instant',return_value=base+timedelta(minutes=25)):
+            self.assertEqual(self.client.get('/api/outreach-system').json['runs'][0]['state'],'running')
+        with patch.object(machine,'instant',return_value=base+timedelta(minutes=51)):
+            d=self.client.get('/api/outreach-system').json
+            self.assertEqual(d['runs'][0]['state'],'interrupted');self.assertFalse(d['config']['enabled'])

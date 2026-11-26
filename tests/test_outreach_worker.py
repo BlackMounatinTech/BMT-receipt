@@ -26,3 +26,24 @@ class OutreachWorkerTests(unittest.TestCase):
         with patch.object(runner,'request',side_effect=ConnectionError('temporary CRM outage')),patch('sys.stderr'):
             runner.maintain_run(process,'prompt')
         self.assertEqual(process.communicate.call_count,2)
+    def test_reply_prompt_excludes_discovery_and_uses_short_budget(self):
+        template=(runner.ROOT/'workflow.txt').read_text()
+        prompt=runner.prepare_prompt(template,dict(mode='replies',work_minutes=8))
+        self.assertIn('RUN MODE: replies',prompt);self.assertIn('End within 8 minutes',prompt)
+        self.assertNotIn('COMPANY-FIRST DISCOVERY:',prompt);self.assertIn('REPLY HANDLING',prompt)
+        self.assertIn('HARD TAB LIMIT',prompt);self.assertIn('DELIVERY REVIEW',prompt)
+        self.assertNotIn('{{WORK_MINUTES}}',prompt)
+    def test_research_prompt_uses_long_budget_and_inbox_checkpoints(self):
+        prompt=runner.prepare_prompt((runner.ROOT/'workflow.txt').read_text(),dict(mode='research',work_minutes=40))
+        self.assertIn('End within 40 minutes',prompt);self.assertIn('COMPANY-FIRST DISCOVERY:',prompt)
+        self.assertIn('about every 15 minutes',prompt)
+    def test_tick_passes_server_budget_to_child_watchdog(self):
+        import tempfile,json
+        with tempfile.TemporaryDirectory() as temp:
+            local=Path(temp);(local/'config.json').write_text(json.dumps({'codex_path':'/fake/codex'}))
+            claim=dict(run='test-research',mode='research',work_minutes=40,timeout_seconds=2700)
+            child=Mock();child.returncode=0
+            with patch.object(runner,'LOCAL',local),patch.object(runner,'request',side_effect=[{},claim,{}]),patch.object(runner.subprocess,'Popen',return_value=child),patch.object(runner,'maintain_run') as maintain:
+                runner.tick()
+            self.assertEqual(maintain.call_args.kwargs['timeout'],2700)
+            self.assertIn('End within 40 minutes',maintain.call_args.args[1])

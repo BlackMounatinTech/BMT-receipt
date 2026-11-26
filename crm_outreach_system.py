@@ -12,6 +12,8 @@ import crm_outreach_health as health
 
 CHANNELS=('Facebook','Instagram','Skool')
 TRADES=('Concrete','Excavation','Landscaping','Decks and fences')
+RUN_LIMITS={'research':dict(work_minutes=40,timeout_seconds=2700,lease_minutes=50),
+            'replies':dict(work_minutes=8,timeout_seconds=600,lease_minutes=12)}
 LOCAL=timezone(timedelta(hours=-7))
 
 def schema(con):
@@ -20,6 +22,17 @@ def schema(con):
     con.execute('INSERT OR IGNORE INTO crm_ai_config(id,enabled,daily_cap,channels,next_run,heartbeat,worker_state) VALUES(1,0,24,?,NULL,NULL,?)',(json.dumps(CHANNELS),'Not connected'))
     con.execute('''CREATE TABLE IF NOT EXISTS crm_ai_runs (id TEXT PRIMARY KEY, started_at TEXT NOT NULL,
       finished_at TEXT, state TEXT NOT NULL, summary TEXT NOT NULL DEFAULT '')''')
+    run_columns={r['name'] for r in con.execute('PRAGMA table_info(crm_ai_runs)')}
+    for name,default in [('mode','research'),('lease_until','')]:
+        if name not in run_columns:con.execute(f"ALTER TABLE crm_ai_runs ADD COLUMN {name} TEXT NOT NULL DEFAULT '{default}'")
+    cfg_columns={r['name'] for r in con.execute('PRAGMA table_info(crm_ai_config)')}
+    if 'next_research' not in cfg_columns:
+        con.execute("ALTER TABLE crm_ai_config ADD COLUMN next_research TEXT NOT NULL DEFAULT ''")
+        latest=con.execute("SELECT started_at FROM crm_ai_runs ORDER BY started_at DESC LIMIT 1").fetchone()
+        next_research=(datetime.fromisoformat(latest['started_at'])+timedelta(hours=1)).isoformat() if latest else ''
+        cfg=con.execute('SELECT next_run FROM crm_ai_config WHERE id=1').fetchone()
+        next_check=min(cfg['next_run'] or stamp(),(instant()+timedelta(minutes=15)).isoformat())
+        con.execute('UPDATE crm_ai_config SET next_research=?,next_run=? WHERE id=1',(next_research,next_check))
     con.execute('''CREATE TABLE IF NOT EXISTS crm_ai_prospects (id TEXT PRIMARY KEY, identity TEXT NOT NULL UNIQUE,
       lead_id INTEGER, company TEXT NOT NULL, location TEXT NOT NULL, trade TEXT NOT NULL, channel TEXT NOT NULL,
       profile_url TEXT NOT NULL, website TEXT NOT NULL, phone TEXT NOT NULL, email TEXT NOT NULL,
@@ -56,12 +69,14 @@ def config(con): return dict(con.execute('SELECT * FROM crm_ai_config WHERE id=1
 def live_run(con, identity):
     r=con.execute("SELECT * FROM crm_ai_runs WHERE id=? AND state='running'",(identity,)).fetchone()
     if not r:raise ValueError('This run is no longer active.')
-    if instant()-datetime.fromisoformat(r['started_at'])>timedelta(minutes=20):raise ValueError('This run lease expired.')
+    if lease_deadline(r)<instant():raise ValueError('This run lease expired.')
     return r
 
+def lease_deadline(row):
+    return datetime.fromisoformat(row['lease_until']) if row['lease_until'] else datetime.fromisoformat(row['started_at'])+timedelta(minutes=20)
+
 def expire(con):
-    cutoff=(instant()-timedelta(minutes=20)).isoformat(timespec='seconds')
-    old=con.execute("SELECT id FROM crm_ai_runs WHERE state='running' AND started_at<?",(cutoff,)).fetchall()
+    old=[r for r in con.execute("SELECT * FROM crm_ai_runs WHERE state='running'") if lease_deadline(r)<instant()]
     for r in old:
         con.execute("UPDATE crm_ai_runs SET state='interrupted',finished_at=?,summary='Run interrupted; check any unconfirmed sends.' WHERE id=?",(stamp(),r['id']))
         con.execute("UPDATE crm_ai_prospects SET state='unconfirmed',stop_reason='Worker interrupted; inspect conversation before any retry.' WHERE run_id=? AND state='sending'",(r['id'],))
@@ -208,6 +223,9 @@ def action(p,owner=False):
             con.execute('UPDATE '+table+" SET state='sending' WHERE id=?",(row['id'],))
             reviewed=True;op='send-result' if kind=='intro' else 'reply-result'
             p=dict(op=op,id=row['id'],message_id=row['id'],state='sent',proof=proof)
+        if op in ('candidate','refresh-candidate','begin-send','research','source'):
+            active=live_run(con,p.get('run_id'))
+            if active['mode']!='research':raise ValueError('This is an inbox-only check; new research and introductions wait for the research run.')
         handled=health.dispatch(con,p)
         if handled is not None:return handled
         handled=intelligence.dispatch(con,p,owner=owner)
@@ -231,9 +249,11 @@ def action(p,owner=False):
         if op=='claim':
             cfg=config(con)
             if not cfg['enabled'] or (cfg['next_run'] and datetime.fromisoformat(cfg['next_run'])>instant()) or con.execute("SELECT 1 FROM crm_ai_runs WHERE state='running'").fetchone():return dict(run=None)
-            ident=secrets.token_hex(16);con.execute("INSERT INTO crm_ai_runs(id,started_at,state) VALUES(?,?,'running')",(ident,stamp()))
-            con.execute("UPDATE crm_ai_config SET next_run=?,worker_state='Researching and checking replies' WHERE id=1",((instant()+timedelta(minutes=30)).isoformat(timespec='seconds'),))
-            return dict(run=ident)
+            now=instant();mode='research' if not cfg['next_research'] or datetime.fromisoformat(cfg['next_research'])<=now else 'replies'
+            limits=RUN_LIMITS[mode];ident=secrets.token_hex(16)
+            con.execute("INSERT INTO crm_ai_runs(id,started_at,state,mode,lease_until) VALUES(?,?,'running',?,?)",(ident,stamp(),mode,(now+timedelta(minutes=limits['lease_minutes'])).isoformat()))
+            con.execute('UPDATE crm_ai_config SET next_run=?,next_research=?,worker_state=? WHERE id=1',((now+timedelta(minutes=15)).isoformat(timespec='seconds'),(now+timedelta(hours=1)).isoformat(timespec='seconds') if mode=='research' else cfg['next_research'],'Researching and checking replies' if mode=='research' else 'Checking replies'))
+            return dict(run=ident,mode=mode,work_minutes=limits['work_minutes'],timeout_seconds=limits['timeout_seconds'])
         if op=='finish':
             live_run(con,p.get('run_id'));summary=short(p,'summary',4000)
             pending=con.execute("SELECT 1 FROM crm_ai_prospects WHERE run_id=? AND state='sending'",(p['run_id'],)).fetchone()

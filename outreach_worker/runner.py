@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Active Mac-session daemon checks every minute; CRM leases 30-minute outreach runs."""
+"""Active Mac-session daemon checks every minute; CRM leases hourly research and 15-minute inbox checks."""
 import fcntl
 import json
 import os
@@ -30,6 +30,17 @@ def maintain_run(process,prompt,timeout=1100,heartbeat_seconds=60):
             except Exception as error:print('Outreach run heartbeat failed: '+str(error),file=sys.stderr,flush=True)
 
 
+def prepare_prompt(template,claim):
+    mode=claim.get('mode','research')
+    if mode=='replies':
+        start=template.index('\nWORKFLOW\n');end=template.index('\nREPLY HANDLING',start)
+        template=template[:start]+template[end:]
+        instructions='INBOX ONLY: Read CRM status and enabled channels. Inspect enabled inboxes for relevant new advertising replies, then every open tracked company conversation, prioritizing unanswered messages and oldest last_thread_check. Handle relevant inbound and meeting/human handoffs, log actual thread checks and remaining backlog, then finish. Do not discover new prospects, add research/sources/candidates, or send cold introductions. The server enforces this separation. '
+    else:
+        instructions='RESEARCH: Reply checks first, then company-first discovery. During longer research, pause at safe checkpoints about every 15 minutes to recheck relevant inboxes before continuing. Never interrupt an unresolved outbound or unsaved draft. '
+    return 'RUN MODE: '+mode+'\n'+instructions+'\n'+template.replace('{{WORK_MINUTES}}',str(claim.get('work_minutes',16)))
+
+
 def tick():
     LOCAL.mkdir(parents=True,exist_ok=True)
     with (LOCAL/'run.lock').open('w') as lock:
@@ -42,6 +53,7 @@ def tick():
         cfg=json.loads((LOCAL/'config.json').read_text())
         codex=cfg['codex_path']
         prompt=(ROOT/'workflow.txt').read_text().replace('{{RUN_ID}}',ident).replace('{{CLIENT}}',str(ROOT/'client.py')).replace('{{RUN_DIR}}',str(folder))
+        prompt=prepare_prompt(prompt,claim)
         probe=LOCAL/'diagnostic-once.txt'
         if probe.exists():
             prompt=probe.read_text();probe.unlink()
@@ -53,7 +65,7 @@ def tick():
             with (folder/'events.jsonl').open('w') as log:
                 os.chmod(folder/'events.jsonl',0o600)
                 process=subprocess.Popen(command,stdin=subprocess.PIPE,stdout=log,stderr=subprocess.STDOUT,start_new_session=True)
-                try:maintain_run(process,prompt)
+                try:maintain_run(process,prompt,timeout=claim.get('timeout_seconds',1100))
                 except subprocess.TimeoutExpired:
                     os.killpg(process.pid,signal.SIGTERM)
                     try:process.wait(timeout=10)

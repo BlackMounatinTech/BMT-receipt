@@ -2,7 +2,7 @@
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="csrf" content="{{ csrf }}"><title>BMT CRM</title>
-<link rel="stylesheet" href="/crm-assets/crm.css?v=outreach-outcomes-1">
+<link rel="stylesheet" href="/crm-assets/crm.css?v=split-outreach-1">
 </head><body>
 <header><a class="brand" href="/">BMT <span>CRM</span></a><nav class="main-nav" aria-label="Main navigation"><button id="nav-calling">Calling</button><button id="nav-followups">Follow-ups</button><button id="nav-outreach">Outreach</button><button id="nav-system">Outreach System</button><button id="nav-leads" class="active">Active prospects</button><button id="nav-customers">Customers</button><button id="nav-calendar">Calendar</button><button id="nav-stats">Stats</button></nav><div class="header-right"><div class="call-counter" aria-label="Calls, booked meetings and closes"><div aria-live="polite"><span><strong id="calls-today">—</strong> Today</span><span><strong id="calls-total">—</strong> Overall</span><span title="Companies with a booked meeting, including those subsequently won"><strong id="meetings-booked">—</strong> Booked</span><span title="Deals marked Won"><strong id="deals-closed">—</strong> Closes</span></div><button id="new-call-day" title="Reset today’s count; keep the overall total">New day</button><small id="counter-error" role="status" hidden></small></div><label class="person">Using as <select id="person"><option>Michael</option><option>Closer</option></select></label><a class="tools" href="/tools/?view=tools">Tools ↗</a></div></header>
 <aside id="outreach-health-banner" class="outreach-alert-banner" role="status" aria-live="polite" hidden></aside>
@@ -60,7 +60,7 @@
  <p id="system-error" role="alert" hidden></p><div class="system-status"><span id="system-worker">Checking Mac connection…</span><button id="system-refresh">Refresh</button></div>
  <details class="stats-section" id="system-health-details"><summary>Connections &amp; issues<span id="system-health-count"></span></summary><div id="system-health"></div></details>
  <div id="system-totals" class="stats-cards"></div>
- <details class="stats-section"><summary>Settings</summary><p class="booking-hint">Checks every 30 minutes while your Mac is connected. Up to two new companies per 30 minutes; replies only when someone responds. Restrictions or uncertain delivery stop sending.</p><form id="system-settings"><label>Maximum new messages per day<input name="daily_cap" type="number" min="1" max="100" required></label><div class="system-channels"><label><input type="checkbox" name="Facebook"> Facebook</label><label><input type="checkbox" name="Instagram"> Instagram</label><label><input type="checkbox" name="Skool"> Skool</label></div><button type="submit">Save settings</button><p id="system-settings-state" role="status"></p></form></details>
+ <details class="stats-section"><summary>Settings</summary><p class="booking-hint">Inbox checks every 15 minutes; research hourly while your Mac is connected. Research can run up to 40 minutes, with inbox checks at safe checkpoints. Up to two new companies per 30 minutes; replies only when someone responds. Restrictions or uncertain delivery stop sending.</p><form id="system-settings"><label>Maximum new messages per day<input name="daily_cap" type="number" min="1" max="100" required></label><div class="system-channels"><label><input type="checkbox" name="Facebook"> Facebook</label><label><input type="checkbox" name="Instagram"> Instagram</label><label><input type="checkbox" name="Skool"> Skool</label></div><button type="submit">Save settings</button><p id="system-settings-state" role="status"></p></form></details>
  <section class="stats-section" id="system-filters"><div class="tabs"><button data-filter="queue" class="selected">Ready to contact</button><button data-filter="needs-reply">Needs reply</button><button data-filter="conversations">Conversations</button><button data-filter="performance">Results</button></div><details><summary>More views</summary><div class="tabs"><button data-filter="research">Research log</button><button data-filter="sources">Sources</button><button data-filter="conversation-archive">Conversation archive</button><button data-filter="all">All companies</button></div></details><div id="system-records"></div></section>
  <details class="stats-section"><summary>Run history</summary><div id="system-runs"></div></details>
 </main>
@@ -102,6 +102,6 @@
 <script src="/crm-assets/lead_time.js?v=1"></script>
 <script src="/crm-assets/business_hours.js?v=1"></script>
 <script src="/crm-assets/stats.js?v=outreach-system-1"></script>
-<script src="/crm-assets/outreach_system.js?v=outreach-outcomes-1"></script>
+<script src="/crm-assets/outreach_system.js?v=split-outreach-1"></script>
 <script src="/crm-assets/calling.js?v=outreach-system-1"></script>
 </body></html>
