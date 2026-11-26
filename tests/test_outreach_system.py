@@ -30,6 +30,16 @@ class OutreachSystemTests(unittest.TestCase):
         return self.post({'op':'claim'}).json['run']
     def candidate(self,run,name='Demo Concrete',site='https://democoncrete.example',phone='5555550100'):
         return {'op':'candidate','run_id':run,'country':'USA','company':name,'location':'Phoenix, AZ','trade':'Concrete','channel':'Facebook','profile_url':'https://www.facebook.com/democoncrete','website':site,'phone':phone,'email':'','ad_url':'https://www.facebook.com/ads/library/?id=123','issue':'Generic ad links to general services.','improvement':'Test a driveway-specific quote path.','scale_evidence':'Installation crew and project portfolio on website.','evidence':'Observed active driveway ad today.','checked_at':store.now(),'message':'Hey, Michael from BMT. Open to a 15-minute Zoom call?'}
+    def test_owner_session_secret_survives_server_restart(self):
+        with patch.dict(os.environ,{'RENDER':'true'}), patch('os.path.ismount',return_value=True):
+            with patch.dict(os.environ,{},clear=False):
+                original=os.environ.pop('CRM_SESSION_SECRET',None)
+                try:
+                    first=crm_web.session_secret();second=crm_web.session_secret()
+                    self.assertEqual(first,second);self.assertGreaterEqual(len(first),32)
+                finally:
+                    if original is not None:os.environ['CRM_SESSION_SECRET']=original
+
     def test_operator_controls_and_single_use_connection(self):
         self.assertEqual(self.client.post('/api/outreach-system',json={'op':'settings','enabled':True},headers=self.csrf).status_code,403)
         self.assertEqual(self.client.post('/api/outreach-system',json={'op':'claim'},headers={'X-BMT-Outreach-Key':'test-key'}).status_code,403)

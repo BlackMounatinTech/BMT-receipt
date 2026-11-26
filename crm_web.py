@@ -6,8 +6,18 @@ from datetime import date
 from flask import Flask, jsonify, render_template, request, session
 import crm_store as store
 
+def session_secret():
+    configured=os.environ.get('CRM_SESSION_SECRET')
+    if configured:return configured
+    if not os.environ.get('RENDER'):return secrets.token_hex(32)
+    # The existing persistent disk keeps signed owner sessions valid across deploys.
+    with store.connect() as con:
+        con.execute('CREATE TABLE IF NOT EXISTS crm_runtime_settings (key TEXT PRIMARY KEY,value TEXT NOT NULL)')
+        con.execute('INSERT OR IGNORE INTO crm_runtime_settings VALUES (?,?)',('session_secret',secrets.token_hex(32)))
+        return con.execute("SELECT value FROM crm_runtime_settings WHERE key='session_secret'").fetchone()[0]
+
 app = Flask(__name__, template_folder='crm_templates', static_folder='crm_static', static_url_path='/crm-assets')
-app.secret_key = os.environ.get('CRM_SESSION_SECRET') or secrets.token_hex(32)
+app.secret_key = session_secret()
 app.config.update(MAX_CONTENT_LENGTH=5_000_000, SESSION_COOKIE_HTTPONLY=True,
                   SESSION_COOKIE_SAMESITE='Strict', SESSION_COOKIE_SECURE=bool(os.environ.get('RENDER')),
                   SESSION_COOKIE_NAME='bmt_crm')
