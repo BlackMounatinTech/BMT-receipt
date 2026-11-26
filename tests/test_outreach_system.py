@@ -638,3 +638,26 @@ class OutreachSystemTests(unittest.TestCase):
         with store.connect() as con:before=con.execute('SELECT COUNT(*) FROM crm_notes').fetchone()[0]
         self.assertTrue(self.post({'op':'reply-result','message_id':msg,'state':'sent','proof':'Retry after HTTP timeout; exact reply already confirmed.'}).json['duplicate'])
         with store.connect() as con:self.assertEqual(con.execute('SELECT COUNT(*) FROM crm_notes').fetchone()[0],before)
+
+    def test_concurrent_intro_attempts_allow_only_one_outbound(self):
+        from concurrent.futures import ThreadPoolExecutor
+        run=self.claim()
+        ids=[self.post(self.candidate(run,'Concurrent '+str(n),'https://concurrent'+str(n)+'.example','555555011'+str(n))).json['id'] for n in range(2)]
+        def begin(ident):
+            try:machine.action({'op':'begin-send','run_id':run,'id':ident});return 'allowed'
+            except ValueError:return 'held'
+        with ThreadPoolExecutor(max_workers=2) as pool:results=list(pool.map(begin,ids))
+        self.assertCountEqual(results,['allowed','held'])
+        d=self.client.get('/api/outreach-system').json
+        self.assertEqual(sum(x['state']=='sending' for x in d['prospects']),1)
+
+    def test_concurrent_inbound_polling_records_one_message_and_note(self):
+        from concurrent.futures import ThreadPoolExecutor
+        run,ident=self.sent_company()
+        payload={'op':'reply','id':ident,'external_key':'concurrent-visible-id','text':'Can you explain your driveway advertising service?','classification':'Question','source_url':'https://www.facebook.com/messages/t/123'}
+        with store.connect() as con:before=con.execute('SELECT COUNT(*) FROM crm_notes').fetchone()[0]
+        with ThreadPoolExecutor(max_workers=2) as pool:results=list(pool.map(lambda _:machine.action(payload),range(2)))
+        self.assertEqual(sum(bool(x.get('duplicate')) for x in results),1)
+        with store.connect() as con:
+            self.assertEqual(con.execute('SELECT COUNT(*) FROM crm_notes').fetchone()[0],before+1)
+            self.assertEqual(con.execute("SELECT COUNT(*) FROM crm_ai_messages WHERE direction='inbound'").fetchone()[0],1)

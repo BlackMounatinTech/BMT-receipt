@@ -150,10 +150,7 @@ def inbound(con,p,row):
             raise ValueError('This platform message ID is already saved with different content/classification. Review the conflict; do not alter CRM status.')
         return dict(id=ident,state=existing['state'],duplicate=True)
     classification=p['classification'];state='ignored' if classification in ('Auto-reply','Not interested') else 'received'
-    inserted=con.execute('INSERT OR IGNORE INTO crm_ai_messages(id,prospect_id,external_key,direction,text,observed_at,source_url,classification,state) VALUES(?,?,?,\'inbound\',?,?,?,?,?)',(ident,row['id'],key,p['text'],api.stamp(),p['source_url'],classification,state))
-    if not inserted.rowcount:
-        existing=con.execute('SELECT state FROM crm_ai_messages WHERE id=?',(ident,)).fetchone()
-        return dict(id=ident,state=existing['state'],duplicate=True)
+    con.execute('INSERT INTO crm_ai_messages(id,prospect_id,external_key,direction,text,observed_at,source_url,classification,state) VALUES(?,?,?,\'inbound\',?,?,?,?,?)',(ident,row['id'],key,p['text'],api.stamp(),p['source_url'],classification,state))
     if classification=='Not interested':con.execute("UPDATE crm_ai_prospects SET conversation_stage='Not interested',conversation_score=0 WHERE id=?",(row['id'],))
     elif classification!='Auto-reply' and row['state']!='stopped' and row['conversation_stage'] not in ('Human needed','Booked','Closed','Not interested'):
         stage='Meeting requested' if classification=='Booking requested' else 'Engaged'

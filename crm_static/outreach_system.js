@@ -1,5 +1,5 @@
 (() => {
-  let data=null, filter='queue', settingsDirty=false, loading=0;
+  let data=null, filter='queue', settingsDirty=false, loading=0, hadIssues=false;
   const drafts=new Map(),clearedDrafts=new Set();
   function draftForm(form,key){form.dataset.draftKey=key;return form;}
   function captureDrafts(){for(const f of document.querySelectorAll('form[data-draft-key]')){const key=f.dataset.draftKey;if(clearedDrafts.has(key)){drafts.delete(key);continue;}const fields=[...f.querySelectorAll('input,select,textarea')];drafts.set(key,{values:fields.map(x=>x.value),open:f.closest('details')?.open,focus:fields.indexOf(document.activeElement),start:document.activeElement?.selectionStart,end:document.activeElement?.selectionEnd});}}
@@ -65,19 +65,19 @@
   function renderHealth(){
     const h=data.health||{},banner=$('#outreach-health-banner'),root=$('#system-health');
     banner.replaceChildren();banner.hidden=false;banner.append(el('strong','','Outreach: '+(h.mode||'Status unknown')));
-    const alerts=h.alerts||[];if(alerts.length){banner.className='outreach-alert-banner needs-attention';banner.append(el('span','',alerts.map(a=>a.scope+': '+a.reason).join(' · ')),link('View issues ↗','/#system'));}else{banner.className='outreach-alert-banner';banner.append(el('span','','Next scheduled check '+date(data.config.next_run)));}
+    const alerts=h.alerts||[];if(alerts.length){banner.className='outreach-alert-banner needs-attention';banner.append(el('span','',alerts.length+' issue'+(alerts.length===1?'':'s')+' need attention'),link('View issues ↗','/#system'));}else{banner.className='outreach-alert-banner';banner.append(el('span','',data.config.enabled?'Next check '+date(data.config.next_run):'Sending is paused.'));}
     root.replaceChildren();if(h.cold_outreach_held)root.append(el('p','system-warning','New introductions are held while cross-platform contact history is unavailable. Verified existing conversations on other available platforms can continue.'));
     for(const c of h.channels||[]){const box=el('div','system-prospect');box.append(el('h3','',c.channel+' · '+c.state.replaceAll('_',' ')),el('p','',c.reason),el('p','system-meta','Last checked '+date(c.checked_at)));if(c.action)box.append(el('p','','Needed: '+c.action));if(c.next_check)box.append(el('p','system-meta','Next connection check no earlier than '+date(c.next_check)));if(data.config.operator&&c.state!=='ready'){const b=el('button','','Check next run');b.onclick=async()=>{b.disabled=true;try{await write({op:'retry-channel',channel:c.channel});}catch(e){fail(e.message);b.disabled=false;}};box.append(b);}root.append(box);}
     for(const a of alerts){const box=el('div','system-warning');box.append(el('strong','',a.scope+' needs attention'),el('p','',a.reason),el('p','','Next step: '+a.action));if(a.updated_at)box.append(el('small','','Last observed '+date(a.updated_at)));if(data.config.operator&&a.scope==='System'){const form=el('form',''),input=el('textarea',''),button=el('button','','Record repair'),status=el('p','');draftForm(form,'alert:'+a.id);input.required=true;input.placeholder='What was fixed and verified?';button.type='submit';form.append(input,button,status);form.onsubmit=async e=>{e.preventDefault();try{await write({op:'resolve-alert',id:a.id,proof:input.value});}catch(error){status.textContent=error.message;}};box.append(form);}root.append(box);}
     if(data.config.operator)for(const p of data.delivery_reviews||[])root.append(deliveryForm(p));
-    if(h.last_run&&h.last_run.finished_at)root.append(el('p','system-meta','Last completed run '+date(h.last_run.finished_at)+': '+h.last_run.summary));
+    const issues=alerts.length+(data.delivery_reviews||[]).length;$('#system-health-count').textContent=issues?' · '+issues+' need attention':' · '+(h.available_channels||[]).length+' connected';
+    if(issues&&!hadIssues)$('#system-health-details').open=true;hadIssues=issues>0;
   }
   function render() {
     captureDrafts();
     const c=data.config,t=data.totals,button=$('#system-toggle');
-    renderHealth();$('#system-running').textContent=data.health?.mode||(c.enabled?'Enabled':'Paused');button.textContent=c.enabled?'Pause outreach':'Start outreach';button.disabled=!c.operator;
-    $('#system-worker').textContent=(c.heartbeat?'Mac last connected '+date(c.heartbeat):'Mac worker not connected')+' · '+c.worker_state+(c.browser_checked_at?' · Browser verified '+date(c.browser_checked_at)+': '+c.browser_state:' · Browser not yet verified by the upgraded worker');
-    $('#system-next').textContent=c.enabled?'Next check: '+date(c.next_run):'No messages will be sent while paused.';
+    renderHealth();button.textContent=c.enabled?'Pause outreach':'Start outreach';button.disabled=!c.operator;
+    $('#system-worker').textContent=c.heartbeat?'Mac last connected '+date(c.heartbeat):'Mac not connected yet';
     if(!c.operator)fail('This browser can view activity. Use your existing owner browser session to control outreach. If access was lost, recover it through your authenticated Render administrator account.');
     const cards=$('#system-totals');cards.replaceChildren();
     for(const [value,label] of [[t.sent_today,'New intros today'],[t.confirmed_sent,'New intros sent'],[t.replies,'Companies replied'],[t.interested,'Interested / booking requested']]){const card=el('div','stats-card');card.append(el('strong','',value),el('span','',label));cards.append(card);}
@@ -85,22 +85,19 @@
     form.querySelector('button').disabled=!c.operator;
     const root=$('#system-records');root.replaceChildren();
     if(intelligenceView(root)) {
-    } else if(filter==='replies') {
-      for(const r of data.replies){const box=el('div','system-prospect');box.append(el('h3','',r.company),el('small','system-meta',r.channel+' · '+r.classification+' · detected '+date(r.observed_at)),el('p','system-reply',r.text));if(r.suggested_reply)box.append(el('strong','','Suggested reply'),el('p','system-message',r.suggested_reply));box.append(link('Open conversation ↗',r.source_url));root.append(box);}
-      if(!data.replies.length)root.append(el('p','booking-hint','No replies recorded yet.'));
     } else {
-      const rows=data.prospects.filter(p=>filter==='all'||(filter==='queue'?p.state==='ready':!!p.automatic_intro)).sort((a,b)=>(b.priority_score||0)-(a.priority_score||0));
+      const rows=data.prospects.filter(p=>filter==='all'||p.state==='ready').sort((a,b)=>(b.priority_score||0)-(a.priority_score||0));
       for(const p of rows){const box=el('div','system-prospect');box.append(el('h3','',p.company),el('small','system-meta',`${p.location} · ${p.trade} · ${p.channel} · ${p.state} · Fit ${p.priority_score||0}/100`),el('p','system-meta',p.source_type==='existing_conversation'?'Source: Imported advertising conversation':p.source_type==='public_intent'?'Source: Public request for advertising help':'Source: Advertising issue'),el('p','', (p.source_type==='public_intent'?'Need expressed: ':'Observed: ')+p.issue),el('p','','Proposed improvement: '+p.improvement),el('p','system-message',p.message));const links=el('div','system-links');links.append(link(p.source_type==='existing_conversation'?'Historical source / thread ↗':p.source_type==='public_intent'?'Source post / ad ↗':'Ad evidence ↗',p.ad_url),link('Company website ↗',p.website),link('Profile / conversation ↗',p.profile_url));if(p.source_type==='public_intent'){box.append(el('p','system-reply',p.intent_author+': “'+p.intent_quote+'”'));links.append(link('Original post / comment ↗',p.intent_url));}if(p.qualification){try{const q=JSON.parse(p.qualification),details=el('details','');details.append(el('summary','','Qualification evidence'));for(const [key,label] of [['usa_base','U.S. base'],['usa_operations','U.S. operations'],['trade_fit','Trade'],['advertising_need','Advertising need'],['scale_fit','Commercial fit'],['identity_match','Company identity'],['improvement_fit','How we can help']]){details.append(el('p','',label+': '+q[key]));if(q[key+'_url'])details.append(link('Verify '+label+' ↗',q[key+'_url']));}if(q.usa_base_quote)details.append(el('p','','Location excerpt: '+q.usa_base_quote));if(q.usa_operations_quote)details.append(el('p','','Operations excerpt: '+q.usa_operations_quote));if(q.review_reason)details.append(el('p','','Evidence critique: '+q.review_reason));try{for(const [k,v] of Object.entries(JSON.parse(p.ranking||'{}')))details.append(el('p','system-meta',k.replaceAll('_',' ')+': '+v.points+'/3 — '+v.evidence));}catch(e){}box.append(details);}catch(e){}}box.append(links,el('p','system-meta','Published '+date(p.source_published_at)+' · Source checked '+date(p.checked_at)+(p.sent_at?' · Sent '+date(p.sent_at):'')));if(p.stop_reason)box.append(el('p','',p.stop_reason));if(p.state==='ready'&&c.operator){const skip=el('button','','Skip this company');skip.onclick=async()=>{try{await write({op:'skip',id:p.id});}catch(e){fail(e.message);}};box.append(skip);}root.append(box);}
       if(!rows.length)root.append(el('p','booking-hint',filter==='queue'?'No qualified prospects waiting. The next run checks replies and researches new advertising opportunities.':'No confirmed sends yet.'));
     }
     const history=$('#system-runs');history.replaceChildren();
-    for(const r of data.runs){const box=el('div','system-run');box.append(el('strong','',date(r.started_at)+' · '+r.state),el('p','',r.summary||'Checking replies and researching companies…'));history.append(box);}
+    for(const r of data.runs){const box=el('details','system-run');box.append(el('summary','',date(r.started_at)+' · '+r.state),el('p','',r.summary||'Checking replies and researching companies…'));history.append(box);}
     if(!data.runs.length)history.append(el('p','booking-hint','The first run will appear here.'));
     restoreDrafts();
   }
   $('#system-toggle').onclick=async()=>{if(!data)return;const b=$('#system-toggle');b.disabled=true;try{await write({op:'settings',enabled:!data.config.enabled});}catch(e){fail(e.message);b.disabled=false;}};
   form.oninput=()=>settingsDirty=true;
   form.onsubmit=async event=>{event.preventDefault();try{await write({op:'settings',daily_cap:Number(form.elements.daily_cap.value),channels:['Facebook','Instagram','Skool'].filter(n=>form.elements.namedItem(n).checked)});settingsDirty=false;$('#system-settings-state').textContent='Settings saved.';}catch(e){$('#system-settings-state').textContent=e.message;}};
-  for(const b of $('#system-filters').querySelectorAll('button'))b.onclick=()=>{filter=b.dataset.filter;$('#system-filters').querySelectorAll('button').forEach(x=>x.classList.toggle('selected',x===b));if(data)render();};
+  for(const b of $('#system-filters').querySelectorAll('[data-filter]'))b.onclick=()=>{filter=b.dataset.filter;$('#system-filters').querySelectorAll('[data-filter]').forEach(x=>x.classList.toggle('selected',x===b));if(data)render();};
   $('#system-refresh').onclick=load;document.addEventListener('crm-system-open',load);setInterval(load,30000);load();
 })();
