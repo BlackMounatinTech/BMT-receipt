@@ -661,3 +661,41 @@ class OutreachSystemTests(unittest.TestCase):
         with store.connect() as con:
             self.assertEqual(con.execute('SELECT COUNT(*) FROM crm_notes').fetchone()[0],before+1)
             self.assertEqual(con.execute("SELECT COUNT(*) FROM crm_ai_messages WHERE direction='inbound'").fetchone()[0],1)
+
+    def test_outreach_to_booking_full_crm_path_recovers_provider_failure(self):
+        """Real CRM endpoints/database; only external Zoom/calendar/email are simulated."""
+        from unittest.mock import Mock
+        import crm_booking as booking
+        run,ident=self.sent_company();incoming=self.inbound(ident)
+        self.post({'op':'thread-check','id':ident,'run_id':run,'proof':'Verified recipient thread and latest actual company question.'})
+        reply=self.post({'op':'begin-reply','id':ident,'run_id':run,'reply_to':incoming,'text':'We could test a driveway-specific campaign. Open to a 15-minute Zoom call?','grounding':'The company asked about driveway jobs; propose a focused advertising discussion.'}).json['id']
+        self.post({'op':'reply-result','message_id':reply,'state':'sent','proof':'Exact response visible as sent in the verified contractor conversation.'})
+        self.inbound(ident,'Yes, January 2 at 9 AM Eastern works. Email pat@example.com.','meeting-details','Booking requested')
+        self.post(self.assessment_payload(run,ident,'Human needed'))
+        snap=self.client.get('/api/outreach-system').json
+        self.assertEqual(snap['totals']['booked'],0)
+        lead=next(r for r in store.list_leads() if r['id']==snap['prospects'][0]['lead_id'])
+        host=dict(id='michael',name='Michael',email='michael@example.com',zoom_user='michael@example.com',calendar_id='michael@example.com')
+        provider=Mock();provider.zoom.return_value=('test-meeting','https://example.zoom.us/j/123')
+        provider.calendar.side_effect=[booking.ProviderError('Simulated temporary calendar outage'),('test-event','https://calendar.google.com/test-event')]
+        sender=Mock(return_value={'ok':True})
+        payload=dict(revision=lead['revision'],contact='Pat',email='pat@example.com',date='2030-01-02',time='09:00',zone='Eastern',host_id='michael',note='Advertising discussion requested via Facebook.')
+        with patch.object(booking,'connection_status',return_value={'ready':True}),patch.object(booking,'hosts',return_value=[host]),patch.object(booking,'Providers',return_value=provider),patch('tools.email_sender.send_email',sender):
+            response=self.client.post('/api/leads/'+str(lead['id'])+'/book',json=payload,headers=self.headers)
+            self.assertEqual(response.status_code,200,response.json);job=response.json
+            self.assertEqual(job['state'],'failed')
+            self.assertEqual(self.client.get('/api/outreach-system').json['totals']['booked'],0)
+            job=booking.resume(job['id'],provider,sender)
+            self.assertEqual(job['state'],'complete')
+            booking.resume(job['id'],provider,sender)
+        provider.zoom.assert_called_once();self.assertEqual(provider.calendar.call_count,2);sender.assert_called_once()
+        self.assertIn('advertising',provider.zoom.call_args.args[0]['description'])
+        self.assertEqual(sender.call_args.args[0],'pat@example.com')
+        self.assertIn('https://example.zoom.us/j/123',sender.call_args.args[2])
+        self.owner_session();self.post({'op':'release-handoff','id':ident,'proof':'Actual CRM booking completed and recipient email and Eastern time verified.'})
+        self.post({'op':'outcome','id':ident,'run_id':run,'outcome':'Booked','occurred_at':store.now(),'proof':'Actual isolated CRM booking completed with Zoom, calendar and confirmation.'})
+        data=self.client.get('/api/outreach-system').json
+        self.assertEqual(data['totals']['confirmed_sent'],1);self.assertEqual(data['totals']['replies'],1)
+        self.assertEqual(data['totals']['booked'],1);self.assertEqual(data['prospects'][0]['conversation_stage'],'Booked')
+        self.assertEqual(data['intelligence']['funnel']['segments'][0]['booked'],1)
+        self.assertEqual(__import__('crm_calling').call_counts()['total'],0)

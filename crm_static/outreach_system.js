@@ -80,7 +80,7 @@
     $('#system-worker').textContent=c.heartbeat?'Mac last connected '+date(c.heartbeat):'Mac not connected yet';
     if(!c.operator)fail('This browser can view activity. Use your existing owner browser session to control outreach. If access was lost, recover it through your authenticated Render administrator account.');
     const cards=$('#system-totals');cards.replaceChildren();
-    for(const [value,label] of [[t.sent_today,'New intros today'],[t.confirmed_sent,'New intros sent'],[t.replies,'Companies replied'],[t.interested,'Interested / booking requested']]){const card=el('div','stats-card');card.append(el('strong','',value),el('span','',label));cards.append(card);}
+    for(const [value,label] of [[t.sent_today,'New intros today'],[t.confirmed_sent,'New intros sent'],[t.replies,'Companies replied'],[t.booked||0,'Meetings booked']]){const card=el('div','stats-card');card.append(el('strong','',value),el('span','',label));cards.append(card);}
     if(!settingsDirty){form.elements.daily_cap.value=c.daily_cap;for(const name of ['Facebook','Instagram','Skool'])form.elements.namedItem(name).checked=c.channels.includes(name);}
     form.querySelector('button').disabled=!c.operator;
     const root=$('#system-records');root.replaceChildren();

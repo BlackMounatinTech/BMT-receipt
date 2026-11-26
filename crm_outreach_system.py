@@ -87,7 +87,7 @@ def snapshot(operator=False):
     today=day()
     return dict(config=cfg,prospects=prospects,replies=replies,runs=runs,
                 delivery_reviews=reviews,health=health_data,intelligence=details,totals=dict(sent_today=sum(day(datetime.fromisoformat(v))==today for v in all_sent),
-                    confirmed_sent=len(all_sent),imported_conversations=imported,replies=replied,interested=interested))
+                    confirmed_sent=len(all_sent),imported_conversations=imported,replies=replied,interested=interested,booked=sum(r['booked'] for r in details['funnel']['segments'])))
 
 def existing_lead(con,p):
     matches=[]
