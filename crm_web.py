@@ -357,7 +357,7 @@ def outreach_system():
     if not outreach_operator():return jsonify(error='Connect this browser to the Mac worker before changing outreach controls.'),403
     p=request.get_json(silent=True)
     if not isinstance(p,dict):return jsonify(error='Provide an outreach action.'),400
-    try:return jsonify(machine.action(p))
+    try:return jsonify(machine.action(p,owner=bool(session.get('outreach_operator'))))
     except (ValueError,TypeError) as e:return jsonify(error=str(e)),400
 
 @app.get('/outreach-connect/<token>')

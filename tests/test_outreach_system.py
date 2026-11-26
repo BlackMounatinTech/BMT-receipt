@@ -425,3 +425,77 @@ class OutreachSystemTests(unittest.TestCase):
     def test_existing_conversation_source_cannot_bypass_new_intro_rules(self):
         run=self.claim();p=self.candidate(run);p['source_type']='existing_conversation'
         self.assertEqual(self.post(p,False).status_code,400)
+
+    def assessment_payload(self,run,ident,stage='Engaged'):
+        return {'op':'assess','run_id':run,'id':ident,'stage':stage,'summary':'The company described its advertising question and needs an accurate next step.','factors':{k:{'points':2,'evidence':'Observed company dialogue supports this specific conversation assessment.'} for k in ('need','engagement','commercial_fit','meeting_readiness')},'markers':['needs_details'],'insights':{'next_step':'Answer the actual question after checking the live thread.'}}
+
+    def test_known_outbound_reply_cannot_be_logged_as_inbound_echo(self):
+        run,ident=self.sent_company();incoming=self.inbound(ident)
+        self.post({'op':'thread-check','id':ident,'run_id':run,'proof':'Verified company thread and latest inbound before responding.'})
+        text='A driveway campaign could help. Which service area should it target?'
+        out=self.post({'op':'begin-reply','id':ident,'run_id':run,'reply_to':incoming,'text':text,'grounding':'Answering their actual request about attracting more driveway jobs.'}).json['id']
+        self.post({'op':'reply-result','message_id':out,'state':'sent','proof':'Verified sent response in the correct company thread.'})
+        for echo in (text,'  '+text.upper().replace(' ','\n')+'  '):
+            r=self.post({'op':'reply','id':ident,'text':echo,'external_key':'echo','classification':'Not interested','source_url':'https://www.facebook.com/messages/t/123','suggested_reply':''},False)
+            self.assertEqual(r.status_code,400)
+        data=self.client.get('/api/outreach-system').json
+        self.assertEqual(data['intelligence']['needs_reply'],[])
+        self.assertEqual(len(data['intelligence']['messages']),2)
+        self.assertNotEqual(data['prospects'][0]['state'],'stopped')
+
+    def test_second_intro_waits_for_first_delivery_result(self):
+        run=self.claim();a=self.post(self.candidate(run)).json['id']
+        b=self.post(self.candidate(run,'Other Fence','https://other.example','5555550191')).json['id']
+        self.post({'op':'begin-send','id':a,'run_id':run})
+        self.assertEqual(self.post({'op':'begin-send','id':b,'run_id':run},False).status_code,400)
+        self.post({'op':'send-result','id':a,'state':'sent','proof':'Confirmed first intro in the verified company thread.'})
+        self.post({'op':'begin-send','id':b,'run_id':run})
+
+    def test_reply_waits_for_pending_intro_delivery_result(self):
+        run,ident=self.sent_company();incoming=self.inbound(ident)
+        self.post({'op':'thread-check','id':ident,'run_id':run,'proof':'Read exact company thread and current new inbound question.'})
+        a=self.post(self.candidate(run,'Other Fence','https://other.example','5555550191')).json['id']
+        self.post({'op':'begin-send','id':a,'run_id':run})
+        reply={'op':'begin-reply','id':ident,'run_id':run,'reply_to':incoming,'text':'Which area do you want more driveway jobs in?','grounding':'They asked about more driveway jobs in their existing verified conversation.'}
+        self.assertEqual(self.post(reply,False).status_code,400)
+        self.post({'op':'send-result','id':a,'state':'sent','proof':'Verified second intro sent before moving to a conversation reply.'})
+        self.post(reply)
+
+    def test_reassessment_cannot_release_protected_stage(self):
+        run,ident=self.sent_company();self.inbound(ident)
+        for stage in ('Human needed','Booked','Closed'):
+            with store.connect() as con:con.execute('UPDATE crm_ai_prospects SET conversation_stage=? WHERE id=?',(stage,ident))
+            self.assertEqual(self.post(self.assessment_payload(run,ident),False).status_code,400)
+            self.inbound(ident,'Another actual inbound question about advertising.',key='after-'+stage)
+            self.assertEqual(self.post(self.assessment_payload(run,ident),False).status_code,400)
+            self.assertEqual(self.client.get('/api/outreach-system').json['prospects'][0]['conversation_stage'],stage)
+
+    def test_handoff_release_requires_real_owner_session_not_worker_claim(self):
+        run,ident=self.sent_company();self.post(self.assessment_payload(run,ident,'Human needed'))
+        p={'op':'release-handoff','id':ident,'proof':'Michael has reviewed the complaint and resolved the outstanding question.'}
+        self.assertEqual(self.post({**p,'owner':True},False).status_code,400)
+        path=self.post({'op':'control-link'}).json['path'];self.client.get(path)
+        self.post(p)
+        d=self.client.get('/api/outreach-system').json
+        self.assertEqual(d['prospects'][0]['conversation_stage'],'Engaged')
+        self.assertTrue(any(o['kind']=='handoff_resolved' for o in d['intelligence']['observations']))
+
+    def test_booking_outcome_does_not_release_unresolved_handoff(self):
+        run,ident=self.sent_company();self.post(self.assessment_payload(run,ident,'Human needed'))
+        lead=self.client.get('/api/outreach-system').json['prospects'][0]['lead_id']
+        with store.connect() as con:con.execute('INSERT INTO crm_stats_bookings VALUES(?,?)',(lead,store.now()))
+        self.post({'op':'outcome','id':ident,'run_id':run,'outcome':'Booked','occurred_at':store.now(),'proof':'Actual isolated CRM booking exists, but the complaint is still unresolved.'})
+        self.assertEqual(self.client.get('/api/outreach-system').json['prospects'][0]['conversation_stage'],'Human needed')
+        path=self.post({'op':'control-link'}).json['path'];self.client.get(path)
+        self.post({'op':'release-handoff','id':ident,'proof':'Michael resolved the question while preserving the existing calendar booking.'})
+        self.assertEqual(self.client.get('/api/outreach-system').json['prospects'][0]['conversation_stage'],'Booked')
+
+    def test_imported_history_not_counted_as_new_automatic_intro(self):
+        run=self.claim();p=self.candidate(run);p.update(op='adopt',original_sent_at=store.now(),history_proof='The original manual advertising pitch is visible in the verified company history.')
+        self.post(p)
+        d=self.client.get('/api/outreach-system').json
+        self.assertEqual(d['totals']['confirmed_sent'],0);self.assertEqual(d['totals']['sent_today'],0)
+        self.assertEqual(d['totals']['imported_conversations'],1)
+        self.assertFalse(d['prospects'][0]['automatic_intro'])
+        self.assertEqual(d['intelligence']['funnel']['segments'][0]['sent'],0)
+        self.assertEqual(d['intelligence']['funnel']['segments'][0]['imported'],1)

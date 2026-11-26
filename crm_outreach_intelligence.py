@@ -3,6 +3,7 @@ import hashlib
 import json
 import re
 import secrets
+import unicodedata
 from datetime import datetime, timedelta
 from urllib.parse import urlparse
 
@@ -117,6 +118,22 @@ def message_review(p):
     variant=api.short(p,'variant',80)
     return json.dumps(review),variant
 
+def normalized_message(value):
+    return ' '.join(unicodedata.normalize('NFKC',value).split()).casefold()
+
+def reject_outbound_echo(con,row,text):
+    incoming=normalized_message(text)
+    if incoming==normalized_message(row['message']) or any(incoming==normalized_message(r['text']) for r in con.execute("SELECT text FROM crm_ai_messages WHERE prospect_id=? AND direction='outbound'",(row['id'],))):
+        raise ValueError('This matches a known outbound message, not a verified new inbound. Inspect the speaker; do not create a reply task.')
+
+def outbound_idle(con):
+    if con.execute("SELECT 1 FROM crm_ai_prospects WHERE state IN ('sending','unconfirmed','blocked')").fetchone() or con.execute("SELECT 1 FROM crm_ai_messages WHERE direction='outbound' AND state IN ('sending','unconfirmed','blocked')").fetchone():
+        raise ValueError('Record or resolve the existing outbound delivery result before attempting another message.')
+
+def confirmed_intro(con,pid):
+    return bool(con.execute('SELECT 1 FROM crm_outreach_events WHERE event_key=?',('ai:'+pid,)).fetchone())
+
+
 def pending(con,pid=None):
     clause=' AND i.prospect_id=?' if pid else ''
     return [dict(r) for r in con.execute('''SELECT i.*,p.company,p.channel,p.profile_url,p.conversation_score,p.conversation_stage
@@ -143,6 +160,10 @@ def assessment(con,p):
     if stage not in STAGES:raise ValueError('Choose a valid conversation stage.')
     if stage=='Booked' and not con.execute('SELECT 1 FROM crm_stats_bookings WHERE lead_id=? AND created_at>=?',(row['lead_id'],row['sent_at'])).fetchone():raise ValueError('A booked rank requires an actual calendar booking.')
     if row['state']=='stopped' and stage!='Not interested':raise ValueError('Do not reopen an opted-out conversation.')
+    protected=row['conversation_stage']
+    if protected in ('Human needed','Booked','Closed','Not interested') and stage!=protected:
+        safe_escalation=stage=='Not interested' or (stage=='Human needed' and protected=='Booked')
+        if not safe_escalation:raise ValueError('A protected conversation stage cannot be cleared by reassessment. Michael must resolve the handoff; booking/sales changes require actual outcomes.')
     factors=p.get('factors',{});score=0
     for key in ('need','engagement','commercial_fit','meeting_readiness'):
         item=factors.get(key,{})
@@ -173,8 +194,18 @@ def observation(con,kind,identity,p):
     con.execute('INSERT OR IGNORE INTO crm_ai_observations VALUES(?,?,?,?,?,?)',(ident,kind,identity,api.stamp(),payload,p.get('run_id','')))
 
 
-def dispatch(con,p):
+def dispatch(con,p,owner=False):
     api=m();op=p.get('op')
+    if op=='release-handoff':
+        if not owner:raise ValueError('Only Michael’s connected CRM browser can resolve a human handoff.')
+        row=prospect(con,p)
+        if row['conversation_stage']!='Human needed' or row['state']=='stopped':raise ValueError('Choose an open human handoff, not an opt-out or closed conversation.')
+        proof=evidence(p.get('proof'),'human handoff resolution')
+        booked=row['sent_at'] and con.execute('SELECT 1 FROM crm_stats_bookings WHERE lead_id=? AND created_at>=?',(row['lead_id'],row['sent_at'])).fetchone()
+        stage='Booked' if booked else 'Engaged'
+        con.execute('UPDATE crm_ai_prospects SET conversation_stage=?,conversation_summary=? WHERE id=?',(stage,'Michael resolved handoff: '+proof,row['id']))
+        observation(con,'handoff_resolved',row['id'],dict(proof=proof,stage=stage,actor='Michael'))
+        return dict(ok=True,stage=stage)
     if op=='browser-health':
         api.live_run(con,p.get('run_id'));state=api.short(p,'state',300)
         con.execute('UPDATE crm_ai_config SET browser_checked_at=?,browser_state=? WHERE id=1',(api.stamp(),state));return dict(ok=True)
@@ -217,6 +248,7 @@ def dispatch(con,p):
         text=api.short(p,'text',900)
         if len(text.split())>120 or text.count('?')>1:raise ValueError('Keep the reply short with at most one question.')
         evidence(p.get('grounding'),'reply context and useful next step')
+        outbound_idle(con)
         ident=secrets.token_hex(16)
         con.execute("INSERT INTO crm_ai_messages(id,prospect_id,external_key,direction,text,observed_at,source_url,classification,reply_to,state,proof,run_id) VALUES(?,?,?,'outbound',?,?,?,'Reply',?,'sending',?,?)",(ident,row['id'],ident,text,api.stamp(),incoming['source_url'],incoming['id'],p['grounding'],p['run_id']))
         return dict(id=ident,message=text)
@@ -244,7 +276,7 @@ def dispatch(con,p):
             booking=con.execute("SELECT 1 FROM crm_stats_bookings WHERE lead_id=? AND created_at>=?",(row['lead_id'],row['sent_at'])).fetchone() if row['lead_id'] else None
             if not booking:raise ValueError('Book through the actual CRM calendar flow first; an agreed time is not a booking.')
         con.execute('INSERT OR IGNORE INTO crm_ai_outcomes VALUES(?,?,?,?,?)',(secrets.token_hex(16),row['id'],outcome,occurred,proof))
-        if outcome in ('Booked','Closed','Lost'):con.execute('UPDATE crm_ai_prospects SET conversation_stage=? WHERE id=?',('Closed' if outcome in ('Closed','Lost') else 'Booked',row['id']))
+        if outcome in ('Closed','Lost') or (outcome=='Booked' and row['conversation_stage']!='Human needed'):con.execute('UPDATE crm_ai_prospects SET conversation_stage=? WHERE id=?',('Closed' if outcome in ('Closed','Lost') else 'Booked',row['id']))
         return dict(ok=True)
     return None
 
@@ -267,8 +299,8 @@ def snapshot(con):
     outcomes=[dict(r) for r in con.execute('SELECT * FROM crm_ai_outcomes ORDER BY occurred_at DESC')]
     segments={}
     for r in con.execute('SELECT * FROM crm_ai_prospects'):
-        key=(r['source_type'],r['trade'],r['variant']);item=segments.setdefault(key,dict(source=key[0],trade=key[1],variant=key[2],qualified=0,attempted=0,sent=0,replied=0,interested=0,booked=0,held=0,closed=0))
-        item['qualified']+=1;item['attempted']+=bool(r['attempted_at']);item['sent']+=bool(r['sent_at'])
+        key=(r['source_type'],r['trade'],r['variant']);item=segments.setdefault(key,dict(source=key[0],trade=key[1],variant=key[2],qualified=0,imported=0,attempted=0,sent=0,replied=0,interested=0,booked=0,held=0,closed=0))
+        item['qualified']+=1;item['attempted']+=bool(r['attempted_at']);item['sent']+=confirmed_intro(con,r['id']);item['imported']+=r['source_type']=='existing_conversation'
         rs=con.execute("SELECT classification FROM crm_ai_messages WHERE prospect_id=? AND direction='inbound'",(r['id'],)).fetchall()
         item['replied']+=any(x['classification']!='Auto-reply' for x in rs)
         item['interested']+=any(x['classification'] in ('Interested','Booking requested') for x in rs)
@@ -292,7 +324,7 @@ def snapshot(con):
     for source in sources:
         matched=con.execute('SELECT id,lead_id,sent_at FROM crm_ai_prospects WHERE ad_url=? OR intent_url=?',(source['url'],source['url'])).fetchall()
         source['qualified']=len(matched)
-        source['sent']=sum(bool(p['sent_at']) for p in matched)
+        source['sent']=sum(confirmed_intro(con,p['id']) for p in matched)
         source['replied']=sum(bool(con.execute("SELECT 1 FROM crm_ai_messages WHERE prospect_id=? AND direction='inbound' AND classification!='Auto-reply'",(p['id'],)).fetchone()) for p in matched)
         source['booked']=sum(bool(p['sent_at'] and con.execute('SELECT 1 FROM crm_stats_bookings WHERE lead_id=? AND created_at>=?',(p['lead_id'],p['sent_at'])).fetchone()) for p in matched)
     return dict(conversations=conversations,conversation_archive=archive,needs_reply=pending(con),messages=messages,assessments=assessments,research=research,sources=sources,outcomes=outcomes,

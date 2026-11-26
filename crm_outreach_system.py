@@ -75,16 +75,18 @@ def snapshot(operator=False):
         health_data=health.snapshot(con)
         cfg=config(con);cfg['channels']=json.loads(cfg['channels']);cfg['operator']=operator
         prospects=[dict(r) for r in con.execute('SELECT * FROM crm_ai_prospects ORDER BY created_at DESC LIMIT 300')]
+        for prospect in prospects:prospect['automatic_intro']=intelligence.confirmed_intro(con,prospect['id'])
         replies=[dict(r) for r in con.execute('''SELECT r.*,p.company,p.channel,p.profile_url FROM crm_ai_replies r
             JOIN crm_ai_prospects p ON p.id=r.prospect_id ORDER BY observed_at DESC LIMIT 200''')]
         runs=[dict(r) for r in con.execute('SELECT * FROM crm_ai_runs ORDER BY started_at DESC LIMIT 30')]
-        all_sent=[r['sent_at'] for r in con.execute('SELECT sent_at FROM crm_ai_prospects WHERE sent_at IS NOT NULL')]
+        all_sent=[r['sent_at'] for r in con.execute("SELECT p.sent_at FROM crm_ai_prospects p WHERE p.sent_at IS NOT NULL AND EXISTS(SELECT 1 FROM crm_outreach_events e WHERE e.event_key='ai:'||p.id)")]
+        imported=con.execute("SELECT COUNT(*) FROM crm_ai_prospects WHERE source_type='existing_conversation'").fetchone()[0]
         replied=con.execute("SELECT COUNT(DISTINCT prospect_id) FROM crm_ai_messages WHERE direction='inbound' AND classification!='Auto-reply'").fetchone()[0]
         interested=con.execute("SELECT COUNT(DISTINCT prospect_id) FROM crm_ai_messages WHERE direction='inbound' AND classification IN ('Interested','Booking requested')").fetchone()[0]
     today=day()
     return dict(config=cfg,prospects=prospects,replies=replies,runs=runs,
                 health=health_data,intelligence=details,totals=dict(sent_today=sum(day(datetime.fromisoformat(v))==today for v in all_sent),
-                    confirmed_sent=len(all_sent),replies=replied,interested=interested))
+                    confirmed_sent=len(all_sent),imported_conversations=imported,replies=replied,interested=interested))
 
 def existing_lead(con,p):
     matches=[]
@@ -181,13 +183,13 @@ def candidate(con,p):
         con.execute("UPDATE crm_ai_prospects SET state='sent',sent_at=?,send_proof=?,conversation_stage='Engaged' WHERE id=?",(sent_at,proof,ident))
     return dict(id=ident,state='sent' if adopting else 'ready',priority_score=priority)
 
-def action(p):
+def action(p,owner=False):
     op=p.get('op')
     with store.connect() as con:
         schema(con);con.commit();con.execute('BEGIN IMMEDIATE');expire(con);intelligence.reconcile(con)
         handled=health.dispatch(con,p)
         if handled is not None:return handled
-        handled=intelligence.dispatch(con,p)
+        handled=intelligence.dispatch(con,p,owner=owner)
         if handled is not None:return handled
         if op=='settings':
             cfg=config(con);enabled=p.get('enabled',bool(cfg['enabled']));cap=p.get('daily_cap',cfg['daily_cap']);channels=p.get('channels',json.loads(cfg['channels']))
@@ -247,6 +249,7 @@ def action(p):
             attempts=sum(day(datetime.fromisoformat(r['attempted_at']))==day() for r in con.execute('SELECT attempted_at FROM crm_ai_prospects WHERE attempted_at IS NOT NULL'))
             health.intro_gate(con,row['channel'])
             if attempts>=cfg['daily_cap']:raise ValueError('Daily outreach cap reached; keep researching without sending.')
+            intelligence.outbound_idle(con)
             con.execute("UPDATE crm_ai_prospects SET state='sending',attempted_at=?,run_id=? WHERE id=?",(stamp(),p['run_id'],row['id']))
             return dict(ok=True,message=row['message'])
         if op=='send-result':
@@ -275,7 +278,7 @@ def action(p):
             classification=p.get('classification')
             if classification not in ('Interested','Booking requested','Question','Not interested','Auto-reply','Other'):raise ValueError('Choose a reply classification.')
             text=short(p,'text',10000);source=url(p.get('source_url'),'conversation link');draft=short(p,'suggested_reply',3000,False)
-            if text==row['message']:raise ValueError('Do not count the outbound message as a reply.')
+            intelligence.reject_outbound_echo(con,row,text)
             ident=hashlib.sha256((row['id']+'\n'+text).encode()).hexdigest()
             result=con.execute('INSERT OR IGNORE INTO crm_ai_replies VALUES(?,?,?,?,?,?,?)',(ident,row['id'],stamp(),text,classification,source,draft))
             if result.rowcount and row['lead_id']:
