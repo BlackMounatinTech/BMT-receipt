@@ -29,7 +29,7 @@ class OutreachSystemTests(unittest.TestCase):
         self.post({'op':'settings','enabled':True})
         return self.post({'op':'claim'}).json['run']
     def candidate(self,run,name='Demo Concrete',site='https://democoncrete.example',phone='5555550100'):
-        return {'op':'candidate','run_id':run,'country':'USA','company':name,'location':'Phoenix, AZ','trade':'Concrete','channel':'Facebook','profile_url':'https://www.facebook.com/democoncrete','website':site,'phone':phone,'email':'','ad_url':'https://www.facebook.com/ads/library/?id=123','issue':'Generic ad links to general services.','improvement':'Test a driveway-specific quote path.','scale_evidence':'Installation crew and project portfolio on website.','evidence':'Observed active driveway ad today.','checked_at':store.now(),'message':'Hey, Michael from BMT. Open to a 15-minute Zoom call?'}
+        return {'op':'candidate','run_id':run,'country':'USA','company':name,'location':'Phoenix, AZ','trade':'Concrete','channel':'Facebook','profile_url':'https://www.facebook.com/democoncrete','website':site,'phone':phone,'email':'','ad_url':'https://www.facebook.com/ads/library/?id=123','issue':'Generic ad links to general services.','improvement':'Test a driveway-specific quote path.','scale_evidence':'Installation crew and project portfolio on website.','evidence':'Observed active driveway ad today.','checked_at':store.now(),'source_published_at':store.now(),'message':'Hey, Michael from BMT. Open to a 15-minute Zoom call?'}
     def test_owner_session_secret_survives_server_restart(self):
         with patch.dict(os.environ,{'RENDER':'true'}), patch('os.path.ismount',return_value=True):
             with patch.dict(os.environ,{},clear=False):
@@ -47,7 +47,7 @@ class OutreachSystemTests(unittest.TestCase):
         self.assertEqual(self.client.get(path).status_code,302)
         self.assertEqual(self.client.get(path).status_code,403)
         self.assertEqual(self.client.post('/api/outreach-system',json={'op':'settings','enabled':True},headers=self.csrf).status_code,200)
-    def test_history_duplicate_gate_and_one_attempt_per_run(self):
+    def test_history_duplicate_gate_and_two_attempts_per_window(self):
         run=self.claim();self.assertIsNone(self.post({'op':'claim'}).json['run'])
         n=store.add_lead('Already called',phone='5555550199',stage='Cold')
         with store.connect() as con:
@@ -57,11 +57,14 @@ class OutreachSystemTests(unittest.TestCase):
         self.assertEqual(self.post(self.candidate(run),False).status_code,400)
         self.post({'op':'begin-send','run_id':run,'id':ident})
         other=self.post(self.candidate(run,'Other Fence','https://otherfence.example','5555550101')).json['id']
-        self.assertEqual(self.post({'op':'begin-send','run_id':run,'id':other},False).status_code,400)
+        self.post({'op':'send-result','id':ident,'state':'sent','proof':'Verified test send'})
+        self.post({'op':'begin-send','run_id':run,'id':other})
+        third=self.post(self.candidate(run,'Third Fence','https://thirdfence.example','5555550102')).json['id']
+        self.assertEqual(self.post({'op':'begin-send','run_id':run,'id':third},False).status_code,400)
         self.post({'op':'finish','run_id':run,'summary':'Stopped before confirmation.'})
         data=self.client.get('/api/outreach-system').json
         self.assertFalse(data['config']['enabled'])
-        self.assertEqual(next(p for p in data['prospects'] if p['id']==ident)['state'],'unconfirmed')
+        self.assertEqual(next(p for p in data['prospects'] if p['id']==other)['state'],'unconfirmed')
     def test_confirmed_send_reply_promotion_and_stats_are_idempotent(self):
         run=self.claim();ident=self.post(self.candidate(run)).json['id']
         self.post({'op':'begin-send','run_id':run,'id':ident})
@@ -106,3 +109,25 @@ class OutreachSystemTests(unittest.TestCase):
         with store.connect() as con:con.execute('UPDATE crm_ai_runs SET started_at=? WHERE id=?',((machine.instant()-timedelta(minutes=21)).isoformat(),run))
         data=self.client.get('/api/outreach-system').json
         self.assertEqual(data['runs'][0]['state'],'interrupted');self.assertFalse(data['config']['enabled'])
+
+    def test_publication_age_required_and_rechecked_before_send(self):
+        run=self.claim();p=self.candidate(run)
+        p.pop('source_published_at')
+        self.assertEqual(self.post(p,False).status_code,400)
+        p['source_published_at']=(machine.instant()-timedelta(days=31)).isoformat()
+        self.assertEqual(self.post(p,False).status_code,400)
+        p['source_published_at']=store.now();ident=self.post(p).json['id']
+        with store.connect() as con:con.execute('UPDATE crm_ai_prospects SET source_published_at=? WHERE id=?',((machine.instant()-timedelta(days=31)).isoformat(),ident))
+        self.assertEqual(self.post({'op':'begin-send','run_id':run,'id':ident},False).status_code,400)
+
+    def test_rolling_window_applies_across_runs(self):
+        run=self.claim()
+        for i in range(2):
+            ident=self.post(self.candidate(run,'Company '+str(i),'https://company'+str(i)+'.example','555555011'+str(i))).json['id']
+            self.post({'op':'begin-send','run_id':run,'id':ident})
+            self.post({'op':'send-result','id':ident,'state':'sent','proof':'Confirmed in test'})
+        self.post({'op':'finish','run_id':run,'summary':'Two test sends.'})
+        with store.connect() as con:con.execute('UPDATE crm_ai_config SET next_run=NULL')
+        second=self.post({'op':'claim'}).json['run']
+        ident=self.post(self.candidate(second,'Another','https://another.example','5555550120')).json['id']
+        self.assertEqual(self.post({'op':'begin-send','run_id':second,'id':ident},False).status_code,400)

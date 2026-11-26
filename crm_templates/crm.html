@@ -58,7 +58,7 @@
  <div class="title-row"><div><h1>Outreach System</h1><p>Advertising opportunities → personal messages → conversations.</p></div><button id="system-toggle" class="primary" disabled>Loading…</button></div>
  <p id="system-error" role="alert" hidden></p><div class="system-status"><strong id="system-running">Paused</strong><span id="system-worker">Checking Mac connection…</span><span id="system-next"></span><button id="system-refresh">Refresh</button></div>
  <div id="system-totals" class="stats-cards"></div>
- <details class="stats-section"><summary>Settings</summary><p class="booking-hint">Research checks every 30 minutes while your Mac worker is available. At most one new introduction per run; daily cap is your own limit, not a platform guarantee. The worker stops on restrictions or an uncertain send.</p><form id="system-settings"><label>Maximum new messages per day<input name="daily_cap" type="number" min="1" max="100" required></label><div class="system-channels"><label><input type="checkbox" name="Facebook"> Facebook</label><label><input type="checkbox" name="Instagram"> Instagram</label><label><input type="checkbox" name="Skool"> Skool</label></div><button type="submit">Save settings</button><p id="system-settings-state" role="status"></p></form></details>
+ <details class="stats-section"><summary>Settings</summary><p class="booking-hint">Research checks every 30 minutes while your Mac worker is available. Only sources from the last 30 days qualify. Zero to two new contacts per rolling 30-minute window across all channels; daily cap is your own limit, not a platform guarantee. The worker stops on restrictions or an uncertain send.</p><form id="system-settings"><label>Maximum new messages per day<input name="daily_cap" type="number" min="1" max="100" required></label><div class="system-channels"><label><input type="checkbox" name="Facebook"> Facebook</label><label><input type="checkbox" name="Instagram"> Instagram</label><label><input type="checkbox" name="Skool"> Skool</label></div><button type="submit">Save settings</button><p id="system-settings-state" role="status"></p></form></details>
  <section class="stats-section"><div class="tabs" id="system-filters"><button data-filter="queue" class="selected">Research &amp; ready</button><button data-filter="sent">Sent</button><button data-filter="replies">Replies</button><button data-filter="all">All activity</button></div><div id="system-records"></div></section>
  <section class="stats-section"><h2>Run history</h2><p class="booking-hint">No worthwhile match can mean no message sent. Unconfirmed attempts stay unconfirmed until the conversation is checked.</p><div id="system-runs"></div></section>
 </main>
@@ -100,6 +100,6 @@
 <script src="/crm-assets/lead_time.js?v=1"></script>
 <script src="/crm-assets/business_hours.js?v=1"></script>
 <script src="/crm-assets/stats.js?v=outreach-system-1"></script>
-<script src="/crm-assets/outreach_system.js?v=intent-1"></script>
+<script src="/crm-assets/outreach_system.js?v=intent-2"></script>
 <script src="/crm-assets/calling.js?v=outreach-system-1"></script>
 </body></html>
