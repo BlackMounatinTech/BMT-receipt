@@ -725,3 +725,12 @@ class OutreachSystemTests(unittest.TestCase):
         with patch.object(machine,'instant',return_value=base+timedelta(minutes=51)):
             d=self.client.get('/api/outreach-system').json
             self.assertEqual(d['runs'][0]['state'],'interrupted');self.assertFalse(d['config']['enabled'])
+
+    def test_hourly_research_is_not_delayed_by_inbox_check_grid(self):
+        run=self.claim();self.post({'op':'finish','run_id':run,'summary':'Research complete, testing independently due hourly research.'})
+        due=(machine.instant()+timedelta(minutes=5)).isoformat(timespec='seconds')
+        with store.connect() as con:con.execute('UPDATE crm_ai_config SET next_run=NULL,next_research=?',(due,))
+        claimed=self.post({'op':'claim'}).json
+        self.assertEqual(claimed['mode'],'replies')
+        cfg=self.client.get('/api/outreach-system').json['config']
+        self.assertEqual(cfg['next_run'],due);self.assertEqual(cfg['next_research'],due)

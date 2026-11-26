@@ -31,7 +31,7 @@ def schema(con):
         latest=con.execute("SELECT started_at FROM crm_ai_runs ORDER BY started_at DESC LIMIT 1").fetchone()
         next_research=(datetime.fromisoformat(latest['started_at'])+timedelta(hours=1)).isoformat() if latest else ''
         cfg=con.execute('SELECT next_run FROM crm_ai_config WHERE id=1').fetchone()
-        next_check=min(cfg['next_run'] or stamp(),(instant()+timedelta(minutes=15)).isoformat())
+        next_check=min(cfg['next_run'] or stamp(),(instant()+timedelta(minutes=15)).isoformat(),next_research or stamp())
         con.execute('UPDATE crm_ai_config SET next_research=?,next_run=? WHERE id=1',(next_research,next_check))
     con.execute('''CREATE TABLE IF NOT EXISTS crm_ai_prospects (id TEXT PRIMARY KEY, identity TEXT NOT NULL UNIQUE,
       lead_id INTEGER, company TEXT NOT NULL, location TEXT NOT NULL, trade TEXT NOT NULL, channel TEXT NOT NULL,
@@ -252,7 +252,9 @@ def action(p,owner=False):
             now=instant();mode='research' if not cfg['next_research'] or datetime.fromisoformat(cfg['next_research'])<=now else 'replies'
             limits=RUN_LIMITS[mode];ident=secrets.token_hex(16)
             con.execute("INSERT INTO crm_ai_runs(id,started_at,state,mode,lease_until) VALUES(?,?,'running',?,?)",(ident,stamp(),mode,(now+timedelta(minutes=limits['lease_minutes'])).isoformat()))
-            con.execute('UPDATE crm_ai_config SET next_run=?,next_research=?,worker_state=? WHERE id=1',((now+timedelta(minutes=15)).isoformat(timespec='seconds'),(now+timedelta(hours=1)).isoformat(timespec='seconds') if mode=='research' else cfg['next_research'],'Researching and checking replies' if mode=='research' else 'Checking replies'))
+            research_at=(now+timedelta(hours=1)).isoformat(timespec='seconds') if mode=='research' else cfg['next_research']
+            check_at=min((now+timedelta(minutes=15)).isoformat(timespec='seconds'),research_at)
+            con.execute('UPDATE crm_ai_config SET next_run=?,next_research=?,worker_state=? WHERE id=1',(check_at,research_at,'Researching and checking replies' if mode=='research' else 'Checking replies'))
             return dict(run=ident,mode=mode,work_minutes=limits['work_minutes'],timeout_seconds=limits['timeout_seconds'])
         if op=='finish':
             live_run(con,p.get('run_id'));summary=short(p,'summary',4000)
