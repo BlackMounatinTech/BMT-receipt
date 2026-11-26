@@ -25,6 +25,9 @@ def tick():
         cfg=json.loads((LOCAL/'config.json').read_text())
         codex=cfg['codex_path']
         prompt=(ROOT/'workflow.txt').read_text().replace('{{RUN_ID}}',ident).replace('{{CLIENT}}',str(ROOT/'client.py')).replace('{{RUN_DIR}}',str(folder))
+        probe=LOCAL/'diagnostic-once.txt'
+        if probe.exists():
+            prompt=probe.read_text();probe.unlink()
         (folder/'prompt.txt').write_text(prompt)
         command=[codex,'-a','never','-c','mcp_servers.playwright.enabled=false','-c','mcp_servers.mobile-next.enabled=false',
                  'exec','--ephemeral','--json','-s','danger-full-access','--skip-git-repo-check','-C',str(ROOT),'-o',str(folder/'summary.txt'),'-']
@@ -49,7 +52,11 @@ def tick():
         except Exception:pass # A completed/expired lease is already durable in the CRM.
 
 if __name__=='__main__':
-    try:tick()
-    except Exception as e:
-        print(time.strftime('%Y-%m-%d %H:%M:%S')+' outreach worker: '+str(e),file=sys.stderr)
-        raise SystemExit(1)
+    repeat='--daemon' in sys.argv
+    while True:
+        try:tick()
+        except Exception as e:
+            print(time.strftime('%Y-%m-%d %H:%M:%S')+' outreach worker: '+str(e),file=sys.stderr,flush=True)
+            if not repeat:raise SystemExit(1)
+        if not repeat:break
+        time.sleep(60)
