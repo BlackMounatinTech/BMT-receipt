@@ -346,3 +346,9 @@ class OutreachSystemTests(unittest.TestCase):
         result=self.post({'op':'begin-reply','id':ident,'run_id':run,'reply_to':incoming,'text':'Which service area do you want more driveway jobs in?','grounding':'The company asked for help getting more driveway jobs in their area.'}).json
         self.post({'op':'reply-result','message_id':result['id'],'state':'unconfirmed','proof':'Delivery status unclear; needs actual thread inspection.'})
         self.assertEqual(self.post({'op':'settings','enabled':True},False).status_code,400)
+
+    def test_new_channel_error_cannot_erase_an_unresolved_history_block(self):
+        run=self.claim();self.block_facebook(run)
+        self.block_facebook(run,'rate_limit',False)
+        data=self.client.get('/api/outreach-system').json
+        self.assertTrue(data['health']['cold_outreach_held'])

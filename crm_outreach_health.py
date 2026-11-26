@@ -60,7 +60,7 @@ def dispatch(con,p):
     reason=m.short(p,'reason',1500);action=m.short(p,'action',1500);proof=m.short(p,'proof',3000)
     blocks_history=p.get('blocks_history',kind in ('history_missing','login_required'))
     if type(blocks_history)is not bool:raise ValueError('Specify whether history verification is blocked.')
-    if kind in ('history_missing','login_required'):blocks_history=True
+    if kind in ('history_missing','login_required') or row['blocks_history']:blocks_history=True
     cooldown=30 if kind=='temporary_error' else 60 if kind=='rate_limit' else 1440
     # Missing-history/auth prompts need human repair; do not repeatedly click/code-request each run.
     next_check=(m.instant()+timedelta(minutes=cooldown)).isoformat()
