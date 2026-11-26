@@ -87,7 +87,7 @@ def add():
         n = store.add_lead(p.get('company', ''), p.get('contact', ''), p.get('phone', ''),
                            p.get('email', ''), p.get('need', ''), p.get('follow_up') or None,
                            **{k:p.get(k,'Prospect' if k=='stage' else '') for k in
-                              ['instagram','location','stage','contact_method','contact_account']})
+                              ['instagram','location','stage','contact_method','contact_account','last_contacted_at']})
         return jsonify(id=n), 201
     except (ValueError, TypeError):
         return jsonify(error='Add a company and a phone number, email or valid Instagram profile. Check any dates.'), 400
@@ -112,7 +112,7 @@ def update(n):
                           follow_up=p.get('follow_up') or None, call_date=p.get('call_date') or None,
                           call_time=p.get('call_time') or None, call_zone=p.get('call_zone') or None,
                           note=p.get('note', ''), author='Closer' if p.get('author') == 'Closer' else 'Michael', zoom_url=p.get('zoom_url'),
-                          **{k:p.get(k) for k in ['instagram','location','stage','contact_method','contact_account']})
+                          **{k:p.get(k) for k in ['instagram','location','stage','contact_method','contact_account','last_contacted_at']})
         return {'ok': True}
     except store.Conflict as e:
         return jsonify(error=str(e)), 409

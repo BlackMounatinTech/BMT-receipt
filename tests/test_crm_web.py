@@ -44,6 +44,24 @@ class SimpleCRMTests(unittest.TestCase):
         self.assertEqual(self.client.patch(f'/api/leads/{n}',json=current,headers=self.headers).status_code,409)
         self.assertEqual(len(crm_store.notes_for(n)),1)
 
+    def test_contact_dates_survive_edits_and_validate(self):
+        n=self.client.post('/api/leads',json={'company':'Outreach example','phone':'555-0100','stage':'Outreach','last_contacted_at':'2026-11-24'},headers=self.headers).json['id']
+        lead=self.client.get('/api/leads').json['leads'][0]
+        self.assertEqual(lead['last_contacted_at'],'2026-11-24')
+        lead.update(last_contacted_at='2026-11-24T19:00:00-08:00')
+        self.assertEqual(self.client.patch(f'/api/leads/{n}',json=lead,headers=self.headers).status_code,200)
+        lead=self.client.get('/api/leads').json['leads'][0]
+        self.assertEqual(lead['last_contacted_at'],'2026-11-25T03:00:00+00:00')
+        lead.pop('last_contacted_at')
+        self.assertEqual(self.client.patch(f'/api/leads/{n}',json=lead,headers=self.headers).status_code,200)
+        lead=self.client.get('/api/leads').json['leads'][0]
+        self.assertEqual(lead['last_contacted_at'],'2026-11-25T03:00:00+00:00')
+        lead['last_contacted_at']='2026-02-30'
+        self.assertEqual(self.client.patch(f'/api/leads/{n}',json=lead,headers=self.headers).status_code,400)
+        lead['last_contacted_at']=''
+        self.assertEqual(self.client.patch(f'/api/leads/{n}',json=lead,headers=self.headers).status_code,200)
+        self.assertIsNone(self.client.get('/api/leads').json['leads'][0]['last_contacted_at'])
+
     def test_validation_and_csrf(self):
         self.assertEqual(self.client.post('/api/leads',json={'company':'No contact'},headers=self.headers).status_code,400)
         self.assertEqual(self.client.post('/api/leads',json={'company':'External','phone':'123'}).status_code,403)

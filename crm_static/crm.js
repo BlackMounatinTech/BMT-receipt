@@ -19,12 +19,17 @@ function render() {
   const query = $('#search').value.trim().toLowerCase();
   const pool = leads.filter(l => pipeline === 'followups' ? (!!l.follow_up || l.status==='Follow-up') && !closed(l) && l.status !== 'Call booked' : pipeline === 'outreach' ? l.stage === 'Outreach' && !closed(l) : pipeline === 'customers' ? l.status === 'Won' : l.stage === 'Prospect' || closed(l));
   if(pipeline==='followups')pool.sort((a,b)=>(a.follow_up||'9999-12-31').localeCompare(b.follow_up||'9999-12-31')||a.company.localeCompare(b.company));
-  const shown = pool.filter(l => (['customers','followups'].includes(pipeline) ? true : view === 'open' ? !closed(l) : view === 'new' ? !closed(l) && !l.seen_at : view === 'due' ? due(l) : closed(l)) && (!query || [l.company,l.contact,l.phone,l.email,l.need,l.location,l.instagram,l.contact_method,l.contact_account].join(' ').toLowerCase().includes(query)));
+  let shown = pool.filter(l => (['customers','followups','outreach'].includes(pipeline) ? true : view === 'open' ? !closed(l) : view === 'new' ? !closed(l) && !l.seen_at : view === 'due' ? due(l) : closed(l)) && (!query || [l.company,l.contact,l.phone,l.email,l.need,l.location,l.instagram,l.contact_method,l.contact_account].join(' ').toLowerCase().includes(query)));
+  $('#outreach-filters').hidden = pipeline !== 'outreach';
+  if(pipeline==='outreach') shown=OutreachList.select(shown, {
+    platform:$('#outreach-platform').value,status:$('#outreach-status').value,
+    from:$('#outreach-from').value,to:$('#outreach-to').value,sort:$('#outreach-sort').value
+  });
   const fresh = leads.filter(l => l.stage !== 'Outreach' && !closed(l) && !l.seen_at).length;
   $('#new-count').textContent = fresh || '';
   $('#pipeline-title').textContent = pipeline === 'followups' ? 'Follow-ups' : pipeline === 'outreach' ? 'Outreach' : pipeline === 'customers' ? 'Customers' : 'Active prospects';
   $('#lead-filters').hidden = pipeline !== 'prospects';
-  $('#summary').textContent = pipeline === 'followups' ? `${pool.filter(l=>l.follow_up).length} scheduled · ${pool.filter(l=>!l.follow_up).length} without a date · ${pool.filter(due).length} due or overdue` : pipeline === 'outreach' ? `${pool.length} contacted · interest not yet confirmed` : pipeline === 'customers' ? `${pool.length} customers` : `${pool.filter(l=>!closed(l)).length} active · ${pool.filter(due).length} to follow up`;
+  $('#summary').textContent = pipeline === 'followups' ? `${pool.filter(l=>l.follow_up).length} scheduled · ${pool.filter(l=>!l.follow_up).length} without a date · ${pool.filter(due).length} due or overdue` : pipeline === 'outreach' ? `${shown.length} of ${pool.length} companies · ${pool.filter(l=>OutreachList.day(l.last_contacted_at)).length} with contact dates` : pipeline === 'customers' ? `${pool.length} customers` : `${pool.filter(l=>!closed(l)).length} active · ${pool.filter(due).length} to follow up`;
   if (!shown.length) {
     const box = el('div', 'empty');
     box.append(el('h2','',!leads.length ? 'Add your first lead.' : 'Nothing here right now.'),el('p','',!leads.length ? 'Put in their details and a few notes. Your closer can take it from there.' : 'Try another filter or search.'));
@@ -37,7 +42,12 @@ function render() {
     name.append(document.createTextNode(lead.company));
     const contact = lead.phone || lead.email || (lead.instagram ? '@'+lead.instagram.split('/').filter(Boolean).at(-1) : '');
     left.append(name,el('div','sub',[lead.location,lead.contact,contact].filter(Boolean).join(' · ') || 'Open to view details'));
-    if (lead.contact_method) left.append(el('div','contact-trail',[lead.contact_method,lead.contact_account ? 'from '+(['Instagram DM','Facebook DM'].includes(lead.contact_method)?'@':'')+lead.contact_account.replace(/^@/,'') : '',lead.last_contacted_at ? new Intl.DateTimeFormat('en-US',{timeZone:'Etc/GMT+7',month:'short',day:'numeric'}).format(new Date(lead.last_contacted_at)) : ''].filter(Boolean).join(' · ')));
+    if (lead.contact_method) left.append(el('div','contact-trail',[lead.contact_method,lead.contact_account ? 'from '+(['Instagram DM','Facebook DM'].includes(lead.contact_method)?'@':'')+lead.contact_account.replace(/^@/,'') : '',pipeline === 'outreach' ? '' : (lead.last_contacted_at ? OutreachList.label(lead.last_contacted_at) : '')].filter(Boolean).join(' · ')));
+    if(pipeline==='outreach') {
+      left.append(el('div','contact-date'+(OutreachList.day(lead.last_contacted_at)?'':' unknown'),'Last contacted: '+OutreachList.label(lead.last_contacted_at)));
+      left.append(el('div','sub','Added: '+OutreachList.label(lead.created_at)));
+      if(lead.follow_up) left.append(el('div','contact-trail','Follow up: '+OutreachList.label(lead.follow_up)));
+    }
     const right = el('div','lead-right');
     if (due(lead)) right.append(el('span','due',lead.follow_up === today() ? 'Follow up today' : 'Follow-up overdue'));
     if (pipeline==='followups')right.append(el('span','followup-date',lead.follow_up?new Date(lead.follow_up+'T12:00:00Z').toLocaleDateString('en-US',{timeZone:'UTC',month:'short',day:'numeric',year:'numeric'}):'No date set'));
@@ -64,8 +74,9 @@ async function openLead(lead = null) {
   for (const name of ['company','contact','phone','email','need','follow_up','status','call_date','call_time','call_zone','zoom_url','instagram','location','stage','contact_method','contact_account']) field(name).value = lead?.[name] || (name === 'stage' ? (pipeline === 'outreach' ? 'Outreach' : 'Prospect') : name === 'status' ? 'New' : name === 'call_zone' ? 'Eastern' : '');
   $('#instagram-link').hidden = !lead?.instagram;
   if (lead?.instagram) $('#instagram-link').href = lead.instagram;
-  $('#contact-date').hidden = !lead?.last_contacted_at;
-  $('#contact-date').textContent = lead?.last_contacted_at ? 'Last contacted: '+new Intl.DateTimeFormat('en-US',{timeZone:'Etc/GMT+7',dateStyle:'medium',timeStyle:'short'}).format(new Date(lead.last_contacted_at))+' Vancouver time' : '';
+  field('last_contacted_date').value = OutreachList.day(lead?.last_contacted_at);
+  $('#contact-date').hidden = !lead;
+  $('#contact-date').textContent = lead ? 'Last contacted: '+OutreachList.label(lead.last_contacted_at) : '';
   if (lead?.call_time) { const match = lead.call_time.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i); if (match) field('call_time').value = String(match[3] ? (+match[1] % 12) + (match[3].toUpperCase() === 'PM' ? 12 : 0) : +match[1]).padStart(2,'0') + ':' + match[2]; }
   $('#seen').hidden = !lead || lead.stage === 'Outreach' || !!lead.seen_at || $('#person').value !== 'Closer';
   $('#seen').disabled = false; $('#seen').textContent = 'Mark as seen by closer';
@@ -86,6 +97,11 @@ modal.oncancel = e => { e.preventDefault(); closeEditor(); };
 field('status').onchange = callFields;
 $('#add').onclick = () => openLead();
 $('#search').oninput = render;
+for(const id of ['outreach-platform','outreach-status','outreach-from','outreach-to','outreach-sort']) $('#'+id).onchange=render;
+$('#outreach-clear').onclick=()=>{
+  for(const id of ['outreach-platform','outreach-status','outreach-from','outreach-to']) $('#'+id).value='';
+  $('#outreach-sort').value='newest'; $('#search').value=''; render();
+};
 $('#refresh').onclick = load;
 $('#person').value = localStorage.getItem('bmt-person') === 'Closer' ? 'Closer' : 'Michael';
 $('#person').onchange = () => localStorage.setItem('bmt-person',$('#person').value);
@@ -104,6 +120,8 @@ $('#seen').onclick = async () => {
 form.onsubmit = async event => {
   event.preventDefault(); if (busy) return;
   const data = Object.fromEntries(new FormData(form));
+  if(data.last_contacted_date !== OutreachList.day(editing?.last_contacted_at)) data.last_contacted_at=data.last_contacted_date;
+  delete data.last_contacted_date;
   if (!data.phone.trim() && !data.email.trim() && !data.instagram.trim()) { $('#form-error').textContent = 'Add a phone number, email or Instagram profile.'; $('#form-error').hidden = false; return; }
   busy = true; $('#save').disabled = true; $('#save').textContent = 'Saving…';
   try {

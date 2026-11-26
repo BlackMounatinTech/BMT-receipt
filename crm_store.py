@@ -89,8 +89,26 @@ def instagram_url(value):
     return 'https://www.instagram.com/' + parts[0].lower() + '/'
 
 
+def contact_timestamp(value):
+    """Accept an evidenced calendar date or an explicit timezone-aware timestamp."""
+    if not value:
+        return None
+    if not isinstance(value, str):
+        raise ValueError('Enter a valid contact date.')
+    try:
+        if len(value) == 10:
+            from datetime import date
+            return date.fromisoformat(value).isoformat()
+        stamp = datetime.fromisoformat(value.replace('Z', '+00:00'))
+        if stamp.tzinfo is None:
+            raise ValueError('Include the contact time zone.')
+        return stamp.astimezone(timezone.utc).isoformat(timespec='seconds')
+    except (ValueError, TypeError):
+        raise ValueError('Enter a valid contact date or a timestamp with its time zone.')
+
+
 def add_lead(company, contact='', phone='', email='', need='', follow_up=None, *,
-             instagram='', location='', stage='Prospect', contact_method='', contact_account=''):
+             instagram='', location='', stage='Prospect', contact_method='', contact_account='', last_contacted_at=None):
     if not company.strip():
         raise ValueError('Enter the company name.')
     instagram = instagram_url(instagram)
@@ -98,13 +116,14 @@ def add_lead(company, contact='', phone='', email='', need='', follow_up=None, *
         raise ValueError('Add a phone number, email or Instagram profile.')
     if stage not in ('Outreach', 'Prospect', 'Cold'):
         raise ValueError('Choose Outreach or Active prospect.')
+    last_contacted_at = contact_timestamp(last_contacted_at)
     stamp = now()
     with connect() as con:
         cursor = con.execute('''INSERT INTO crm_leads
-            (company,contact,phone,email,need,follow_up,created_at,updated_at,instagram,location,stage,contact_method,contact_account)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+            (company,contact,phone,email,need,follow_up,created_at,updated_at,instagram,location,stage,contact_method,contact_account,last_contacted_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
             (company.strip(), contact.strip(), phone.strip(), email.strip(), need.strip(), follow_up, stamp, stamp,
-             instagram,location.strip(),stage,contact_method.strip(),contact_account.strip()))
+             instagram,location.strip(),stage,contact_method.strip(),contact_account.strip(),last_contacted_at))
         return cursor.lastrowid
 
 
@@ -122,7 +141,7 @@ def notes_for(lead_id):
 
 def update_lead(lead_id, revision, *, company, contact, phone, email, need, status,
                 follow_up=None, call_date=None, call_time=None, call_zone=None, note='', author='Closer', zoom_url=None,
-                instagram=None, location=None, stage=None, contact_method=None, contact_account=None):
+                instagram=None, location=None, stage=None, contact_method=None, contact_account=None, last_contacted_at=None):
     if not company.strip():
         raise ValueError('Company name is required.')
     if status not in STATUSES:
@@ -176,6 +195,9 @@ def update_lead(lead_id, revision, *, company, contact, phone, email, need, stat
                     (instagram,previous['location'] if location is None else location.strip(),stage,
                      previous['contact_method'] if contact_method is None else contact_method.strip(),
                      previous['contact_account'] if contact_account is None else contact_account.strip(),lead_id))
+        if last_contacted_at is not None:
+            con.execute('UPDATE crm_leads SET last_contacted_at=? WHERE id=?',
+                        (contact_timestamp(last_contacted_at), lead_id))
         if booking_changed:
             con.execute('''UPDATE crm_leads SET booking_version=booking_version+1,
                 confirmation_sent_at=NULL,confirmed_at=NULL,reminder_sent_at=NULL,booked_at=? WHERE id=?''', (now() if start else None,lead_id))
