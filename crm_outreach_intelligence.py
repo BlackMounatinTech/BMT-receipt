@@ -28,6 +28,10 @@ def schema(con):
       markers TEXT NOT NULL,evidence TEXT NOT NULL)''')
     con.execute('''CREATE TABLE IF NOT EXISTS crm_ai_outcomes (id TEXT PRIMARY KEY,prospect_id TEXT NOT NULL,
       outcome TEXT NOT NULL,occurred_at TEXT NOT NULL,proof TEXT NOT NULL,UNIQUE(prospect_id,outcome))''')
+    con.execute('''INSERT OR IGNORE INTO crm_ai_messages(id,prospect_id,external_key,direction,text,observed_at,source_url,classification,state)
+      SELECT 'legacy:'||r.id,r.prospect_id,'legacy:'||r.id,'inbound',r.text,r.observed_at,r.source_url,r.classification,
+      CASE WHEN r.classification IN ('Auto-reply','Not interested') THEN 'ignored' ELSE 'received' END
+      FROM crm_ai_replies r WHERE NOT EXISTS(SELECT 1 FROM crm_ai_messages x WHERE x.prospect_id=r.prospect_id AND x.direction='inbound' AND x.text=r.text)''')
     cols={r['name'] for r in con.execute('PRAGMA table_info(crm_ai_prospects)')}
     for name,definition in [('priority_score','INTEGER NOT NULL DEFAULT 0'),('ranking',"TEXT NOT NULL DEFAULT '{}'"),('message_review',"TEXT NOT NULL DEFAULT '{}'"),('variant',"TEXT NOT NULL DEFAULT 'unclassified'"),('last_thread_check',"TEXT NOT NULL DEFAULT ''"),('conversation_stage',"TEXT NOT NULL DEFAULT 'Awaiting reply'"),('conversation_score','INTEGER NOT NULL DEFAULT 0'),('conversation_summary',"TEXT NOT NULL DEFAULT ''")]:
         if name not in cols:con.execute('ALTER TABLE crm_ai_prospects ADD COLUMN '+name+' '+definition)

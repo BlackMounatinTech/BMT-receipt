@@ -135,7 +135,10 @@ def report(start, end):
                 automatic.setdefault(key,dict(day=d,channel=key[1],sent=0,replies=0,interested=0,booked=0))['sent']+=1
         exists=con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='crm_ai_replies'").fetchone()
         if exists:
-            for r in con.execute("SELECT p.channel,r.prospect_id,MIN(r.observed_at) AS observed_at,MAX(CASE WHEN r.classification IN ('Interested','Booking requested') THEN 1 ELSE 0 END) AS interested FROM crm_ai_replies r JOIN crm_ai_prospects p ON p.id=r.prospect_id WHERE r.classification!='Auto-reply' GROUP BY r.prospect_id"):
+            has_messages=con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='crm_ai_messages'").fetchone()
+            reply_table='crm_ai_messages' if has_messages else 'crm_ai_replies'
+            direction=" AND r.direction='inbound'" if has_messages else ''
+            for r in con.execute("SELECT p.channel,r.prospect_id,MIN(r.observed_at) AS observed_at,MAX(CASE WHEN r.classification IN ('Interested','Booking requested') THEN 1 ELSE 0 END) AS interested FROM "+reply_table+" r JOIN crm_ai_prospects p ON p.id=r.prospect_id WHERE r.classification!='Auto-reply'"+direction+" GROUP BY r.prospect_id"):
                 d=local_day(r['observed_at'])
                 if d and start<=d<=end:
                     key=(d,r['channel']);entry=automatic.setdefault(key,dict(day=d,channel=key[1],sent=0,replies=0,interested=0,booked=0));entry['replies']+=1;entry['interested']+=r['interested']

@@ -76,8 +76,8 @@ def snapshot(operator=False):
             JOIN crm_ai_prospects p ON p.id=r.prospect_id ORDER BY observed_at DESC LIMIT 200''')]
         runs=[dict(r) for r in con.execute('SELECT * FROM crm_ai_runs ORDER BY started_at DESC LIMIT 30')]
         all_sent=[r['sent_at'] for r in con.execute('SELECT sent_at FROM crm_ai_prospects WHERE sent_at IS NOT NULL')]
-        replied=con.execute("SELECT COUNT(DISTINCT prospect_id) FROM crm_ai_replies WHERE classification!='Auto-reply'").fetchone()[0]
-        interested=con.execute("SELECT COUNT(DISTINCT prospect_id) FROM crm_ai_replies WHERE classification IN ('Interested','Booking requested')").fetchone()[0]
+        replied=con.execute("SELECT COUNT(DISTINCT prospect_id) FROM crm_ai_messages WHERE direction='inbound' AND classification!='Auto-reply'").fetchone()[0]
+        interested=con.execute("SELECT COUNT(DISTINCT prospect_id) FROM crm_ai_messages WHERE direction='inbound' AND classification IN ('Interested','Booking requested')").fetchone()[0]
     today=day()
     return dict(config=cfg,prospects=prospects,replies=replies,runs=runs,
                 intelligence=details,totals=dict(sent_today=sum(day(datetime.fromisoformat(v))==today for v in all_sent),
