@@ -1,6 +1,6 @@
 const $ = q => document.querySelector(q);
 const form = $('#lead-form'), modal = $('#editor');
-let pipeline = ['outreach','customers','calendar','followups','stats','system'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'prospects';
+let pipeline = ['outreach','customers','calendar','followups','stats','system','sales-call','onboarding'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'prospects';
 let inboxRows=[], inboxView='all', inboxRefreshBusy=false;
 let leads = [], view = 'open', editing = null, baseline = '', busy = false;
 const el = (tag, cls, text) => { const n = document.createElement(tag); n.className = cls; if (text != null) n.textContent = text; return n; };
@@ -282,14 +282,14 @@ function renderCalendar() {
 function showPage(page) {
   if (['calling','booking'].includes(location.hash.slice(1))) return;
   pipeline=page; view='open';
-  $('#leads-page').hidden=['calendar','stats','system'].includes(page);$('#calendar-page').hidden=page!=='calendar';$('#stats-page').hidden=page!=='stats';$('#system-page').hidden=page!=='system';
-  for (const [id,name] of [['nav-outreach','outreach'],['nav-leads','prospects'],['nav-customers','customers'],['nav-calendar','calendar'],['nav-followups','followups'],['nav-stats','stats'],['nav-system','system']]) $('#'+id).classList.toggle('active',page===name);
+  $('#leads-page').hidden=['calendar','stats','system','sales-call','onboarding'].includes(page);$('#calendar-page').hidden=page!=='calendar';$('#stats-page').hidden=page!=='stats';$('#system-page').hidden=page!=='system';$('#sales-call-page').hidden=page!=='sales-call';$('#onboarding-page').hidden=page!=='onboarding';
+  for (const [id,name] of [['nav-outreach','outreach'],['nav-leads','prospects'],['nav-customers','customers'],['nav-calendar','calendar'],['nav-followups','followups'],['nav-stats','stats'],['nav-system','system'],['nav-sales-call','sales-call'],['nav-onboarding','onboarding']]) $('#'+id).classList.toggle('active',page===name);
   document.querySelectorAll('[data-view]').forEach(b=>b.classList.toggle('selected',b.dataset.view==='open'));
   if(page==='outreach')refreshInbox();
-  if(page==='calendar')renderCalendar();else if(page==='stats')document.dispatchEvent(new Event('crm-stats-open'));else if(page==='system')document.dispatchEvent(new Event('crm-system-open'));else render();
+  if(page==='calendar')renderCalendar();else if(page==='stats')document.dispatchEvent(new Event('crm-stats-open'));else if(page==='system')document.dispatchEvent(new Event('crm-system-open'));else if(!['sales-call','onboarding'].includes(page)) render();
 }
-for (const [id,page] of [['nav-outreach','outreach'],['nav-leads','prospects'],['nav-customers','customers'],['nav-calendar','calendar'],['nav-followups','followups'],['nav-stats','stats'],['nav-system','system']]) $('#'+id).onclick=()=>{location.hash=page;showPage(page)};
-window.addEventListener('hashchange',()=>showPage(['outreach','customers','calendar','followups','stats','system'].includes(location.hash.slice(1))?location.hash.slice(1):'prospects'));
+for (const [id,page] of [['nav-outreach','outreach'],['nav-leads','prospects'],['nav-customers','customers'],['nav-calendar','calendar'],['nav-followups','followups'],['nav-stats','stats'],['nav-system','system'],['nav-sales-call','sales-call'],['nav-onboarding','onboarding']]) $('#'+id).onclick=()=>{location.hash=page;showPage(page)};
+window.addEventListener('hashchange',()=>showPage(['outreach','customers','calendar','followups','stats','system','sales-call','onboarding'].includes(location.hash.slice(1))?location.hash.slice(1):'prospects'));
 showPage(pipeline);
 $('#calendar-today').onclick=()=>{calendarDay=today();calendarMonth=calendarDay.slice(0,7);renderCalendar()};
 for(const [id,delta] of [['previous-month',-1],['next-month',1]])$('#'+id).onclick=()=>{const d=dayDate(calendarMonth+'-01');d.setUTCMonth(d.getUTCMonth()+delta);calendarMonth=d.toISOString().slice(0,7);renderCalendar()};

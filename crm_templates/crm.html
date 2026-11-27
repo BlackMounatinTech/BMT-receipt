@@ -4,7 +4,7 @@
 <meta name="csrf" content="{{ csrf }}"><title>BMT CRM</title>
 <link rel="stylesheet" href="/crm-assets/crm.css?v=outreach-inbox-3">
 </head><body>
-<header><a class="brand" href="/">BMT <span>CRM</span></a><nav class="main-nav" aria-label="Main navigation"><button id="nav-calling">Calling</button><button id="nav-followups">Follow-ups</button><button id="nav-outreach">Outreach</button><button id="nav-system">Outreach System</button><button id="nav-leads" class="active">Active prospects</button><button id="nav-customers">Customers</button><button id="nav-calendar">Calendar</button><button id="nav-stats">Stats</button></nav><div class="header-right"><div class="call-counter" aria-label="Calls, booked meetings and closes"><div aria-live="polite"><span><strong id="calls-today">—</strong> Today</span><span><strong id="calls-total">—</strong> Overall</span><span title="Companies with a booked meeting, including those subsequently won"><strong id="meetings-booked">—</strong> Booked</span><span title="Deals marked Won"><strong id="deals-closed">—</strong> Closes</span></div><button id="new-call-day" title="Reset today’s count; keep the overall total">New day</button><small id="counter-error" role="status" hidden></small></div><label class="person">Using as <select id="person"><option>Michael</option><option>Closer</option></select></label><a class="tools" href="/tools/?view=tools">Tools ↗</a></div></header>
+<header><a class="brand" href="/">BMT <span>CRM</span></a><nav class="main-nav" aria-label="Main navigation"><button id="nav-calling">Calling</button><button id="nav-followups">Follow-ups</button><button id="nav-outreach">Outreach</button><button id="nav-system">Outreach System</button><button id="nav-leads" class="active">Active prospects</button><button id="nav-customers">Customers</button><button id="nav-calendar">Calendar</button><button id="nav-stats">Stats</button><button id="nav-sales-call">Sales Call</button><button id="nav-onboarding">Onboarding</button></nav><div class="header-right"><div class="call-counter" aria-label="Calls, booked meetings and closes"><div aria-live="polite"><span><strong id="calls-today">—</strong> Today</span><span><strong id="calls-total">—</strong> Overall</span><span title="Companies with a booked meeting, including those subsequently won"><strong id="meetings-booked">—</strong> Booked</span><span title="Deals marked Won"><strong id="deals-closed">—</strong> Closes</span></div><button id="new-call-day" title="Reset today’s count; keep the overall total">New day</button><small id="counter-error" role="status" hidden></small></div><label class="person">Using as <select id="person"><option>Michael</option><option>Closer</option></select></label><a class="tools" href="/tools/?view=tools">Tools ↗</a></div></header>
 <aside id="outreach-health-banner" class="outreach-alert-banner" role="status" aria-live="polite" hidden></aside>
 <main id="calling-page" hidden>
  <div class="title-row"><div><h1>Calling</h1><p>One company. One conversation. Next lead.</p></div><button id="upload-sheet" class="primary">Upload lead sheet</button></div>
@@ -74,6 +74,12 @@
  <section class="stats-section" id="system-filters"><div class="tabs"><button data-filter="queue" class="selected">Ready to contact</button><button data-filter="needs-reply">Needs reply</button><button data-filter="conversations">Conversations</button><button data-filter="performance">Results</button></div><details><summary>More views</summary><div class="tabs"><button data-filter="research">Research log</button><button data-filter="sources">Sources</button><button data-filter="conversation-archive">Conversation archive</button><button data-filter="all">All companies</button></div></details><div id="system-records"></div></section>
  <details class="stats-section"><summary>Run history</summary><div id="system-runs"></div></details>
 </main>
+<main id="sales-call-page" hidden>
+ <div class="title-row"><h1>Sales Call</h1></div>
+</main>
+<main id="onboarding-page" hidden>
+ <div class="title-row"><h1>Onboarding</h1></div>
+</main>
 <main id="stats-page" hidden>
  <div class="title-row"><div><h1>Stats</h1><p>Daily results · Vancouver time</p></div><button id="stats-refresh">Refresh</button></div>
  <form id="stats-range" class="stats-range"><label>From<input id="stats-start" type="date" required></label><label>Through<input id="stats-end" type="date" required></label><button type="submit">Show stats</button></form>
@@ -111,10 +117,10 @@
 </dialog>
 <dialog id="email-dialog" aria-labelledby="email-title"><div class="dialog-heading"><h2 id="email-title">Appointment email</h2><button id="close-email" class="close" aria-label="Close appointment email">×</button></div><p id="email-to"></p><label>Customer email<input id="booking-correct-email" type="email" maxlength="250" autocomplete="email"></label><button id="correct-booking-email" type="button">Save email &amp; resend booking</button><p class="booking-hint">Updates the calendar invitation and resends the confirmation using the same time and Zoom link.</p><strong id="email-subject"></strong><pre id="email-body"></pre><p id="email-state" role="status"></p><p class="booking-hint">A reminder with the Zoom link goes out 24 hours before the call. Calls booked inside 24 hours receive the confirmation only.</p><p id="email-error" role="alert" hidden></p><div class="dialog-actions"><button id="confirm-reply">Mark confirmed after reply</button><button id="send-email" class="primary">Send confirmation</button></div></dialog>
 <script src="/crm-assets/outreach_list.js?v=outreach-inbox-3"></script>
-<script src="/crm-assets/crm.js?v=outreach-inbox-3"></script>
+<script src="/crm-assets/crm.js?v=sales-onboarding-1"></script>
 <script src="/crm-assets/lead_time.js?v=1"></script>
 <script src="/crm-assets/business_hours.js?v=1"></script>
 <script src="/crm-assets/stats.js?v=outreach-system-1"></script>
 <script src="/crm-assets/outreach_system.js?v=outreach-inbox-3"></script>
-<script src="/crm-assets/calling.js?v=outreach-system-1"></script>
+<script src="/crm-assets/calling.js?v=sales-onboarding-1"></script>
 </body></html>
