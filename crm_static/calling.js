@@ -225,12 +225,57 @@
   $('#close-connections').onclick=()=>$('#connections-dialog').close();
 
   const bookingForm=$('#booking-form'),bf=n=>bookingForm.elements.namedItem(n);
+  let bookingBaseDate='';
+  const daySlider=$('#booking-day-slider'),timeSlider=$('#booking-time-slider');
+  function calendarDate(date,days=0){
+    const value=new Date(date+'T12:00:00Z');value.setUTCDate(value.getUTCDate()+days);
+    return value.toISOString().slice(0,10);
+  }
+  function renderBookingSliders(){
+    bf('date').value=calendarDate(bookingBaseDate,Number(daySlider.value));
+    const minutes=Number(timeSlider.value),hour=Math.floor(minutes/60),minute=minutes%60;
+    bf('time').value=String(hour).padStart(2,'0')+':'+String(minute).padStart(2,'0');
+    const days=Number(daySlider.value),prefix=days===0?'Today · ':days===1?'Tomorrow · ':'';
+    const dateLabel=prefix+new Intl.DateTimeFormat('en-US',{timeZone:'UTC',weekday:'short',month:'short',day:'numeric',year:'numeric'}).format(new Date(bf('date').value+'T12:00:00Z'));
+    const timeLabel=`${hour%12||12}:${String(minute).padStart(2,'0')} ${hour>=12?'PM':'AM'}`;
+    $('#booking-date-label').textContent=dateLabel;$('#booking-time-label').textContent=timeLabel;
+    daySlider.setAttribute('aria-valuetext',dateLabel);timeSlider.setAttribute('aria-valuetext',timeLabel);
+    $('#booking-exact-date').value=bf('date').value;
+    $('#booking-day-back').disabled=days===0;$('#booking-day-forward').disabled=days===Number(daySlider.max);
+    $('#booking-time-back').disabled=minutes===0;$('#booking-time-forward').disabled=minutes===1425;
+    previewTime();
+  }
+  function initializeBookingSliders(){
+    const zone=BMTLeadTime.labels[bf('zone').value]||'Etc/GMT+7';
+    const parts=Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone:zone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date()).map(p=>[p.type,p.value]));
+    bookingBaseDate=`${parts.year}-${parts.month}-${parts.day}`;
+    const next=Math.ceil((Number(parts.hour)*60+Number(parts.minute)+30)/15)*15;
+    daySlider.max='60';daySlider.value=next>1425?'1':'0';timeSlider.value=String(next>1425?600:next);
+    $('#booking-exact-date').min=bookingBaseDate;$('#booking-exact-date').closest('details').open=false;renderBookingSliders();
+  }
+  daySlider.oninput=renderBookingSliders;timeSlider.oninput=renderBookingSliders;
+  for(const [id,slider,amount] of [['booking-day-back',daySlider,-1],['booking-day-forward',daySlider,1],['booking-time-back',timeSlider,-15],['booking-time-forward',timeSlider,15]]){
+    $('#'+id).onclick=()=>{slider.value=String(Math.max(Number(slider.min),Math.min(Number(slider.max),Number(slider.value)+amount)));renderBookingSliders();};
+  }
+  $('#booking-exact-date').onchange=()=>{
+    const date=$('#booking-exact-date').value;
+    if(!date||date<bookingBaseDate){$('#booking-exact-date').value=bf('date').value;return;}
+    const days=Math.round((new Date(date+'T12:00:00Z')-new Date(bookingBaseDate+'T12:00:00Z'))/86400000);
+    daySlider.max=String(Math.max(60,days));daySlider.value=String(days);renderBookingSliders();
+  };
+  bf('zone').onchange=()=>{
+    $('#booking-zone-summary').textContent=bf('zone').value?'Times shown in '+bf('zone').value+' time.':'';
+    initializeBookingSliders();
+  };
   $('#call-book').onclick=async()=>{
     if(callBusy)return;
     if(!await canLeave())return;
     bookingLead=current();currentJob=null;bookingForm.reset();
     bf('contact').value=bookingLead.contact;bf('email').value=bookingLead.email;bf('note').value=$('#call-note').value;
-    bf('zone').value=bookingLead.call_zone||Object.keys(BMTLeadTime.labels).find(k=>BMTLeadTime.labels[k]===BMTLeadTime.zoneFor(bookingLead))||'';
+    bf('zone').value=Object.keys(BMTLeadTime.labels).find(k=>BMTLeadTime.labels[k]===BMTLeadTime.zoneFor(bookingLead))||'';
+    $('#booking-zone-fallback').hidden=!!bf('zone').value;
+    $('#booking-zone-summary').textContent=bf('zone').value?'Times shown in '+bf('zone').value+' time · carried over from this lead.':'';
+    initializeBookingSliders();
     $('#booking-company').textContent=bookingLead.company;$('#booking-result').hidden=true;bookingForm.hidden=false;error('booking-error','');
     try {
       const c=await connectionInfo();bf('host_id').replaceChildren(new Option('Choose the meeting host',''));

@@ -2,7 +2,7 @@
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="csrf" content="{{ csrf }}"><title>BMT CRM</title>
-<link rel="stylesheet" href="/crm-assets/crm.css?v=customer-profiles-2">
+<link rel="stylesheet" href="/crm-assets/crm.css?v=booking-sliders-1">
 </head><body>
 <header><a class="brand" href="/">BMT <span>CRM</span></a><nav class="main-nav" aria-label="Main navigation"><button id="nav-calling">Calling</button><button id="nav-followups">Follow-ups</button><button id="nav-outreach">Outreach</button><button id="nav-system">Outreach System</button><button id="nav-leads" class="active">Active prospects</button><button id="nav-customers">Customers</button><button id="nav-calendar">Calendar</button><button id="nav-stats">Data</button><button id="nav-sales-call">Sales Call</button><button id="nav-onboarding">Onboarding</button></nav><div class="header-right"><div class="call-counter" aria-label="Calls, booked meetings and closes"><div aria-live="polite"><span><strong id="calls-today">—</strong> Today</span><span><strong id="calls-total">—</strong> Overall</span><span title="Companies with a booked meeting, including those subsequently won"><strong id="meetings-booked">—</strong> Booked</span><span title="Deals marked Won"><strong id="deals-closed">—</strong> Closes</span></div><button id="new-call-day" title="Reset today’s count; keep the overall total">New day</button><small id="counter-error" role="status" hidden></small></div><label class="person">Using as <select id="person"><option>Michael</option><option>Closer</option></select></label><a class="tools" href="/tools/?view=tools">Tools ↗</a></div></header>
 <aside id="outreach-health-banner" class="outreach-alert-banner" role="status" aria-live="polite" hidden></aside>
@@ -31,8 +31,13 @@
  <form id="booking-form" class="booking-panel">
   <div class="pair"><label>Customer name<input name="contact" required maxlength="200"></label><label>Customer email<input name="email" type="email" required maxlength="250"></label></div>
   <label>Meeting host<select name="host_id" required></select></label>
-  <div class="pair"><label>Date (their time)<input name="date" type="date" required></label><label>Time (their time)<input name="time" type="time" required></label></div>
-  <label>Customer’s time zone<select name="zone" required><option value="">Choose a time zone</option><option>Eastern</option><option>Central</option><option>Mountain</option><option>Pacific (US)</option><option>Arizona</option><option>Vancouver</option></select></label>
+  <p id="booking-zone-summary" class="booking-zone-summary"></p>
+  <label id="booking-zone-fallback" hidden>Time zone not saved for this lead<select name="zone" required><option value="">Choose a time zone</option><option>Eastern</option><option>Central</option><option>Mountain</option><option>Pacific (US)</option><option>Arizona</option><option>Vancouver</option></select></label>
+  <input name="date" type="hidden"><input name="time" type="hidden">
+  <div class="booking-sliders">
+   <section class="booking-slider"><label for="booking-day-slider">Meeting date</label><output id="booking-date-label" for="booking-day-slider"></output><input id="booking-day-slider" type="range" min="0" max="60" step="1" value="0" aria-label="Meeting date"><div class="booking-slider-actions"><button id="booking-day-back" type="button" aria-label="Previous day">− 1 day</button><button id="booking-day-forward" type="button" aria-label="Next day">+ 1 day</button></div><details><summary>Choose a later date</summary><label>Exact date<input id="booking-exact-date" type="date"></label></details></section>
+   <section class="booking-slider"><label for="booking-time-slider">Meeting time · their time</label><output id="booking-time-label" for="booking-time-slider"></output><input id="booking-time-slider" type="range" min="0" max="1425" step="15" value="600" aria-label="Meeting time"><div class="booking-slider-actions"><button id="booking-time-back" type="button" aria-label="15 minutes earlier">− 15 min</button><button id="booking-time-forward" type="button" aria-label="15 minutes later">+ 15 min</button></div></section>
+  </div>
   <p id="booking-time-preview" role="status"></p><p class="booking-hint">30 minutes. Checks the host’s Google Calendar, creates their Zoom meeting, sends a calendar invitation and a BMT confirmation email.</p>
   <label>Notes for your team<textarea name="note" rows="3" maxlength="10000"></textarea></label>
   <p id="booking-connections" role="status"></p><p id="booking-error" role="alert" hidden></p>
@@ -172,7 +177,7 @@
 <script src="/crm-assets/business_hours.js?v=1"></script>
 <script src="/crm-assets/stats.js?v=outreach-system-1"></script>
 <script src="/crm-assets/outreach_system.js?v=outreach-inbox-3"></script>
-<script src="/crm-assets/calling.js?v=sales-onboarding-1"></script>
+<script src="/crm-assets/calling.js?v=booking-sliders-1"></script>
 <script src="/crm-assets/onboarding.js?v=onboarding-audit-3"></script>
 <script src="/crm-assets/customers.js?v=1"></script>
 </body></html>
