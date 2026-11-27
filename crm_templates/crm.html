@@ -117,14 +117,14 @@
  </section>
 </main>
 <main id="onboarding-page" class="onboarding-workspace" hidden>
- <div class="title-row"><div><h1>Onboarding</h1><p>Read the prompt. Record their answer. Save to the customer.</p></div><button id="onboarding-refresh" type="button">Refresh customers</button></div>
+ <div class="title-row"><div><h1>Onboarding</h1><p>Internal worksheet. Read the prompt, record their answer, and save to their customer profile.</p></div><button id="onboarding-refresh" type="button">Refresh customers</button></div>
  <div class="onboarding-picker"><label>Customer<select id="onboarding-customer"><option value="">Choose a customer</option></select></label><p id="onboarding-customer-summary"></p></div>
  <p id="onboarding-error" role="alert" hidden></p><p id="onboarding-state" role="status" aria-live="polite"></p>
  <div id="onboarding-empty" class="stats-section"><p>Only companies in Customers appear here. Confirm a prospect’s purchase after the sales call before starting onboarding.</p></div>
  <form id="onboarding-form" hidden>
   <div class="onboarding-column-head" aria-hidden="true"><span>What to ask / do</span><span>Their answer</span></div>
   <div id="onboarding-questions"></div>
-  <div class="onboarding-save-bar"><label>Save worksheet for<select id="onboarding-customer-bottom"><option value="">Choose a customer</option></select></label><div><button id="onboarding-save" class="primary" type="submit">Save worksheet</button></div><p id="onboarding-bottom-state" role="status"></p></div>
+  <div class="onboarding-save-bar"><label>Save worksheet for<select id="onboarding-customer-bottom"><option value="">Choose a customer</option></select></label><div><button id="onboarding-save" class="primary" type="submit">Save worksheet</button><button id="onboarding-profile" type="button">Save &amp; open customer profile</button><button id="onboarding-reload" type="button">Load saved answers</button></div><p id="onboarding-bottom-state" role="status"></p></div>
  </form>
 </main>
 <main id="stats-page" hidden>
@@ -173,6 +173,6 @@
 <script src="/crm-assets/stats.js?v=outreach-system-1"></script>
 <script src="/crm-assets/outreach_system.js?v=outreach-inbox-3"></script>
 <script src="/crm-assets/calling.js?v=sales-onboarding-1"></script>
-<script src="/crm-assets/onboarding.js?v=customers-only-2"></script>
+<script src="/crm-assets/onboarding.js?v=onboarding-audit-3"></script>
 <script src="/crm-assets/customers.js?v=1"></script>
 </body></html>

@@ -1,14 +1,14 @@
 /* One durable worksheet per CRM company; local drafts never switch company IDs. */
 (() => {
   const form=$('#onboarding-form'), top=$('#onboarding-customer'), bottom=$('#onboarding-customer-bottom');
-  let fields=[], companies=[], record=null, loading=0, saving=false, dirty=false;
+  let fields=[], companies=[], record=null, loading=0, saving=false, dirty=false, draftRevision=0;
   const draftKey=id=>'bmt-onboarding-draft:'+id;
   const state=text=>{$('#onboarding-state').textContent=text;$('#onboarding-bottom-state').textContent=text;};
   const error=text=>{$('#onboarding-error').textContent=text;$('#onboarding-error').hidden=!text;};
   function answers(){return Object.fromEntries(fields.map(f=>[f.key,form.elements.namedItem(f.key)?.value||'']));}
   function keepDraft(){
     if(!record||!dirty)return;
-    try{localStorage.setItem(draftKey(record.lead_id),JSON.stringify({data:answers(),revision:record.revision}));}catch(_){state('Unsaved changes. Save the worksheet before leaving.');}
+    try{localStorage.setItem(draftKey(record.lead_id),JSON.stringify({data:answers(),revision:draftRevision}));}catch(_){state('Unsaved changes. Save the worksheet before leaving.');}
   }
   function syncPickers(id){top.value=String(id||'');bottom.value=String(id||'');}
   function pickers(){
@@ -59,8 +59,8 @@
     state('Loading worksheet…');
     try{
       const data=await api('/api/leads/'+id+'/onboarding');if(ticket!==loading)return;
-      record=data;let restored=false,stale=false;
-      try{const draft=JSON.parse(localStorage.getItem(draftKey(id))||'null');if(draft){restored=true;stale=draft.revision!==data.revision;record.data={...record.data,...draft.data};dirty=true;}}catch(_){}
+      record=data;draftRevision=data.revision;let restored=false,stale=false;
+      try{const draft=JSON.parse(localStorage.getItem(draftKey(id))||'null');if(draft){restored=true;draftRevision=draft.revision;stale=draftRevision!==data.revision;record.data={...record.data,...draft.data};dirty=true;}}catch(_){}
       build();form.hidden=false;syncPickers(id);
       $('#onboarding-customer-summary').textContent=record.company+(record.customer?' · Customer':' · Prospect');
       state(stale?'Recovered a local draft, but a newer worksheet exists on the server. Review before saving.':restored?'Recovered unsaved answers from this device. Save to sync to the CRM.':record.updated_at?'Saved worksheet loaded.':'Prefilled from the company record. Save to store this worksheet.');
@@ -68,17 +68,20 @@
     }catch(e){if(ticket===loading){error(e.message);state('Could not load worksheet. Choose the company again to retry.');}}
   }
   async function save(){
-    if(!record||saving||!form.reportValidity())return;
-    saving=true;form.inert=true;top.disabled=true;bottom.disabled=true;error('');state('Saving to CRM…');keepDraft();
+    if(!record||saving||!form.reportValidity())return false;
+    if(draftRevision!==record.revision&&!confirm('A newer worksheet was saved elsewhere. Replace its answers with this local draft? Cancel to keep both, or use Load saved answers to discard this draft.'))return;
+    saving=true;form.inert=true;$('#onboarding-refresh').disabled=true;top.disabled=true;bottom.disabled=true;error('');state('Saving to CRM…');keepDraft();
     const id=record.lead_id;
     try{
       const result=await api('/api/leads/'+id+'/onboarding',{method:'POST',body:JSON.stringify({data:answers(),revision:record.revision,lead_revision:record.lead_revision})});
-      record=result;dirty=false;try{localStorage.removeItem(draftKey(id));}catch(_){}
+      record=result;draftRevision=result.revision;dirty=false;try{localStorage.removeItem(draftKey(id));}catch(_){}
       $('#onboarding-customer-summary').textContent=result.company+(result.customer?' · Customer':' · Prospect');
-      state('Saved to '+result.company+' · '+new Date(result.updated_at).toLocaleString());
+      state('Saved to '+result.company+' · '+new Date(result.updated_at).toLocaleString());return true;
     }catch(e){error(e.message);state('Not saved to CRM. Your answers remain in this worksheet and its local draft.');}
-    finally{saving=false;form.inert=false;top.disabled=false;bottom.disabled=false;}
+    finally{saving=false;form.inert=false;$('#onboarding-refresh').disabled=false;top.disabled=false;bottom.disabled=false;}
   }
+  $('#onboarding-reload').onclick=async()=>{if(!record||saving)return;if(dirty&&!confirm('Discard this customer’s unsaved answers and load the saved worksheet?'))return;const id=record.lead_id;try{localStorage.removeItem(draftKey(id));}catch(_){error('Could not clear the local draft. Your answers have been kept.');return;}dirty=false;await choose(String(id));};
+  $('#onboarding-profile').onclick=async()=>{if(!record||saving)return;const saved=await save();if(saved&&record)window.BMTCustomerProfile.open(record.lead_id);};
   top.onchange=()=>choose(top.value);bottom.onchange=()=>choose(bottom.value);
   form.oninput=e=>{if(!fields.some(f=>f.key===e.target.name))return;dirty=true;keepDraft();state('Unsaved changes · draft kept on this device. Click Save worksheet to sync.');};
   form.onsubmit=e=>{e.preventDefault();save();};
