@@ -74,6 +74,8 @@ def read(lead_id):
         lead = con.execute('SELECT * FROM crm_leads WHERE id=?', (lead_id,)).fetchone()
         if not lead:
             raise LookupError('Customer not found.')
+        if lead['status']!='Won':
+            raise ValueError('Onboarding is available only for companies in Customers. Confirm their purchase after the sales call first.')
         row = con.execute('SELECT * FROM crm_onboarding WHERE lead_id=?', (lead_id,)).fetchone()
         defaults = {k: lead[k] for k in ('contact', 'email', 'phone')}
         defaults.update(area=lead['location'], budget='1500', lead_owner=lead['contact'],
@@ -112,27 +114,19 @@ def save(lead_id, payload):
             from urllib.parse import urlparse
             parsed=urlparse(value)
             if parsed.scheme not in ('http','https') or not parsed.netloc: raise ValueError('Use a full web link for '+f['label']+'.')
-    promote=payload.get('mark_customer') is True
-    if promote and not (data.get('contract')=='Yes' and data.get('payment') in (
-            '$1,500 USD deposit received','$3,000 USD upfront received') and
-            all(data.get(k) for k in ('onboarding_date','onboarding_time','onboarding_zone'))):
-        raise ValueError('Confirm the signed contract, received payment, and booked onboarding date, time, and time zone first.')
+    if payload.get('mark_customer'):
+        raise ValueError('Confirm the purchase from Sales Call before opening onboarding.')
     with store.connect() as con:
         schema(con)
         con.execute('BEGIN IMMEDIATE')
         lead=con.execute('SELECT * FROM crm_leads WHERE id=?',(lead_id,)).fetchone()
         if not lead: raise LookupError('Customer not found.')
+        if lead['status']!='Won': raise ValueError('Only customers can have an onboarding worksheet.')
         row=con.execute('SELECT revision FROM crm_onboarding WHERE lead_id=?',(lead_id,)).fetchone()
         revision=row['revision'] if row else 0
         if payload['revision']!=revision: raise store.Conflict('This worksheet changed elsewhere. Reload it before saving; your draft is still available.')
-        if promote and payload.get('lead_revision')!=lead['revision']:
-            raise store.Conflict('This customer record changed elsewhere. Reload before moving it to Customers.')
         stamp=store.now()
         con.execute('''INSERT INTO crm_onboarding VALUES (?,?,?,?) ON CONFLICT(lead_id)
             DO UPDATE SET data=excluded.data, revision=excluded.revision, updated_at=excluded.updated_at''',
             (lead_id,json.dumps(data),revision+1,stamp))
-        if promote and lead['status']!='Won':
-            con.execute("UPDATE crm_leads SET status='Won',updated_at=?,revision=revision+1 WHERE id=?",(stamp,lead_id))
-            con.execute('INSERT INTO crm_notes (lead_id,author,text,created_at) VALUES (?,?,?,?)',
-                        (lead_id,'Michael','Marked customer after operator confirmed signed contract, initial payment received, and onboarding call booked.',stamp))
     return read(lead_id)

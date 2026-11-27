@@ -13,8 +13,8 @@
   function syncPickers(id){top.value=String(id||'');bottom.value=String(id||'');}
   function pickers(){
     for(const select of [top,bottom]){
-      select.replaceChildren(new Option('Choose a company',''));
-      for(const [label,items] of [['Customers',companies.filter(l=>l.status==='Won')],['Active prospects — confirm payment before moving to Customers',companies.filter(l=>l.status!=='Won'&&l.status!=='Lost'&&l.stage!=='Cold')]]){
+      select.replaceChildren(new Option('Choose a customer',''));
+      for(const [label,items] of [['Customers',companies.filter(l=>l.status==='Won')]]){
         if(!items.length)continue;
         const group=document.createElement('optgroup');group.label=label;
         for(const l of items.sort((a,b)=>a.company.localeCompare(b.company)))group.append(new Option(l.company,String(l.id)));
@@ -42,7 +42,10 @@
     }
   }
   async function refresh(){
-    try{const [a,b]=await Promise.all([api('/api/onboarding/fields'),api('/api/leads')]);fields=a.fields;companies=b.leads;pickers();error('');
+    try{const [a,b]=await Promise.all([api('/api/onboarding/fields'),api('/api/customers')]);fields=a.fields;companies=b.customers;
+      if(record&&!companies.some(l=>l.id===record.lead_id)){keepDraft();record=null;dirty=false;form.hidden=true;$('#onboarding-empty').hidden=false;$('#onboarding-customer-summary').textContent='';state('This company is no longer in Customers.');}
+      pickers();error('');
+      $('#onboarding-empty').textContent=companies.length?'Choose a customer to load their saved onboarding details.':'No customers yet. After a prospect signs and pays, confirm their purchase in Sales Call. They will then appear here.';
       if(!record){let last='';try{last=localStorage.getItem('bmt-onboarding-customer')||'';}catch(_){}if([...top.options].some(o=>o.value===last)&&last)await choose(last);}
     }
     catch(e){error(e.message);}
@@ -58,31 +61,30 @@
       const data=await api('/api/leads/'+id+'/onboarding');if(ticket!==loading)return;
       record=data;let restored=false,stale=false;
       try{const draft=JSON.parse(localStorage.getItem(draftKey(id))||'null');if(draft){restored=true;stale=draft.revision!==data.revision;record.data={...record.data,...draft.data};dirty=true;}}catch(_){}
-      build();form.hidden=false;syncPickers(id);$('#onboarding-promote').hidden=record.customer;
+      build();form.hidden=false;syncPickers(id);
       $('#onboarding-customer-summary').textContent=record.company+(record.customer?' · Customer':' · Prospect');
       state(stale?'Recovered a local draft, but a newer worksheet exists on the server. Review before saving.':restored?'Recovered unsaved answers from this device. Save to sync to the CRM.':record.updated_at?'Saved worksheet loaded.':'Prefilled from the company record. Save to store this worksheet.');
       if(stale)error('Your local draft is older than the saved worksheet. Compare your answers before saving; saving will replace the saved answers.');
     }catch(e){if(ticket===loading){error(e.message);state('Could not load worksheet. Choose the company again to retry.');}}
   }
-  async function save(promote=false){
+  async function save(){
     if(!record||saving||!form.reportValidity())return;
-    if(promote&&!confirm('Confirm you have checked the signed contract, received payment, and booked onboarding details. Move '+record.company+' to Customers?'))return;
     saving=true;form.inert=true;top.disabled=true;bottom.disabled=true;error('');state('Saving to CRM…');keepDraft();
     const id=record.lead_id;
     try{
-      const result=await api('/api/leads/'+id+'/onboarding',{method:'POST',body:JSON.stringify({data:answers(),revision:record.revision,lead_revision:record.lead_revision,mark_customer:promote})});
+      const result=await api('/api/leads/'+id+'/onboarding',{method:'POST',body:JSON.stringify({data:answers(),revision:record.revision,lead_revision:record.lead_revision})});
       record=result;dirty=false;try{localStorage.removeItem(draftKey(id));}catch(_){}
-      $('#onboarding-promote').hidden=result.customer;$('#onboarding-customer-summary').textContent=result.company+(result.customer?' · Customer':' · Prospect');
+      $('#onboarding-customer-summary').textContent=result.company+(result.customer?' · Customer':' · Prospect');
       state('Saved to '+result.company+' · '+new Date(result.updated_at).toLocaleString());
-      if(promote){await refresh();await load();}
     }catch(e){error(e.message);state('Not saved to CRM. Your answers remain in this worksheet and its local draft.');}
     finally{saving=false;form.inert=false;top.disabled=false;bottom.disabled=false;}
   }
   top.onchange=()=>choose(top.value);bottom.onchange=()=>choose(bottom.value);
   form.oninput=e=>{if(!fields.some(f=>f.key===e.target.name))return;dirty=true;keepDraft();state('Unsaved changes · draft kept on this device. Click Save worksheet to sync.');};
-  form.onsubmit=e=>{e.preventDefault();save();};$('#onboarding-promote').onclick=()=>save(true);
+  form.onsubmit=e=>{e.preventDefault();save();};
   $('#onboarding-refresh').onclick=async()=>{keepDraft();await refresh();};
   window.addEventListener('beforeunload',e=>{keepDraft();if(dirty){e.preventDefault();e.returnValue='';}});
   window.addEventListener('hashchange',()=>{if(location.hash==='#onboarding')refresh();else keepDraft();});
+  window.BMTOnboarding={open:async id=>{keepDraft();await refresh();await choose(String(id));location.hash='onboarding';}};
   if(location.hash==='#onboarding')refresh();
 })();

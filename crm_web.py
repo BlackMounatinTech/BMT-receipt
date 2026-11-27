@@ -60,6 +60,55 @@ def onboarding_fields():
     from crm_onboarding import FIELDS
     return jsonify(fields=FIELDS)
 
+@app.get('/api/customers')
+def customers_list():
+    import crm_customers
+    return jsonify(customers=crm_customers.list_customers())
+
+@app.route('/api/customers/<int:n>', methods=['GET','POST'])
+def customer_profile(n):
+    import crm_customers
+    try:
+        if request.method=='GET':return jsonify(crm_customers.read(n))
+        p=request.get_json(silent=True)
+        if not isinstance(p,dict):raise ValueError('Provide the profile details.')
+        return jsonify(crm_customers.save(n,p))
+    except store.Conflict as e:return jsonify(error=str(e)),409
+    except LookupError as e:return jsonify(error=str(e)),404
+    except (ValueError,TypeError) as e:return jsonify(error=str(e)),400
+
+@app.post('/api/leads/<int:n>/confirm-sale')
+def customer_confirm_sale(n):
+    import crm_customers
+    try:
+        p=request.get_json(silent=True)
+        if not isinstance(p,dict):raise ValueError('Provide the purchase confirmation.')
+        return jsonify(crm_customers.confirm_sale(n,p))
+    except store.Conflict as e:return jsonify(error=str(e)),409
+    except LookupError as e:return jsonify(error=str(e)),404
+    except (ValueError,TypeError) as e:return jsonify(error=str(e)),400
+
+@app.post('/api/customers/<int:n>/documents')
+def customer_document_upload(n):
+    import crm_customers
+    try:
+        upload=request.files.get('file')
+        if not upload:raise ValueError('Choose a document.')
+        return jsonify(crm_customers.attach(n,request.form.get('kind'),upload))
+    except LookupError as e:return jsonify(error=str(e)),404
+    except (ValueError,TypeError) as e:return jsonify(error=str(e)),400
+
+@app.get('/api/customers/<int:n>/documents/<int:doc_id>')
+def customer_document_download(n,doc_id):
+    import crm_customers
+    from flask import send_file
+    from io import BytesIO
+    try:
+        d=crm_customers.document(n,doc_id)
+        return send_file(BytesIO(d['body']),mimetype=d['mime'],as_attachment=True,download_name=d['filename'])
+    except LookupError as e:return jsonify(error=str(e)),404
+    except ValueError as e:return jsonify(error=str(e)),400
+
 @app.route('/api/leads/<int:n>/onboarding', methods=['GET','POST'])
 def onboarding_record(n):
     import crm_onboarding

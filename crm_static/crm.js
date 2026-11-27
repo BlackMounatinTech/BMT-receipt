@@ -65,7 +65,7 @@ function render() {
     if (due(lead)) right.append(el('span','due',lead.follow_up === today() ? 'Follow up today' : 'Follow-up overdue'));
     if (pipeline==='followups')right.append(el('span','followup-date',lead.follow_up?new Date(lead.follow_up+'T12:00:00Z').toLocaleDateString('en-US',{timeZone:'UTC',month:'short',day:'numeric',year:'numeric'}):'No date set'));
     right.append(el('span','badge' + (lead.status === 'Call booked' ? ' booked' : lead.status === 'Won' ? ' won' : ''),pipeline==='outreach'?(lead.contact_method||'Platform not recorded'):lead.status),el('span','chevron','›'));
-    row.append(left,right); row.onclick = () => openLead(lead); root.append(row);
+    row.append(left,right); row.onclick = () => pipeline==='customers' ? window.BMTCustomerProfile.open(lead.id) : openLead(lead); root.append(row);
   }
 }
 function activityLabel(value) {
@@ -174,6 +174,7 @@ $('#seen').onclick = async () => {
 form.onsubmit = async event => {
   event.preventDefault(); if (busy) return;
   const data = Object.fromEntries(new FormData(form));
+  if(data.status==='Won' && editing?.status!=='Won' && !confirm('Only mark this company as a customer after receiving their signed contract and payment. Have both been received?')) return;
   if(data.last_contacted_date !== OutreachList.day(editing?.last_contacted_at)) data.last_contacted_at=data.last_contacted_date;
   delete data.last_contacted_date;
   if (!data.phone.trim() && !data.email.trim() && !data.instagram.trim()) { $('#form-error').textContent = 'Add a phone number, email or Instagram profile.'; $('#form-error').hidden = false; return; }
