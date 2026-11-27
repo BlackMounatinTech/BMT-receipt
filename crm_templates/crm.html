@@ -2,7 +2,7 @@
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="csrf" content="{{ csrf }}"><title>BMT CRM</title>
-<link rel="stylesheet" href="/crm-assets/crm.css?v=sales-playbook-1">
+<link rel="stylesheet" href="/crm-assets/crm.css?v=onboarding-worksheet-1">
 </head><body>
 <header><a class="brand" href="/">BMT <span>CRM</span></a><nav class="main-nav" aria-label="Main navigation"><button id="nav-calling">Calling</button><button id="nav-followups">Follow-ups</button><button id="nav-outreach">Outreach</button><button id="nav-system">Outreach System</button><button id="nav-leads" class="active">Active prospects</button><button id="nav-customers">Customers</button><button id="nav-calendar">Calendar</button><button id="nav-stats">Data</button><button id="nav-sales-call">Sales Call</button><button id="nav-onboarding">Onboarding</button></nav><div class="header-right"><div class="call-counter" aria-label="Calls, booked meetings and closes"><div aria-live="polite"><span><strong id="calls-today">—</strong> Today</span><span><strong id="calls-total">—</strong> Overall</span><span title="Companies with a booked meeting, including those subsequently won"><strong id="meetings-booked">—</strong> Booked</span><span title="Deals marked Won"><strong id="deals-closed">—</strong> Closes</span></div><button id="new-call-day" title="Reset today’s count; keep the overall total">New day</button><small id="counter-error" role="status" hidden></small></div><label class="person">Using as <select id="person"><option>Michael</option><option>Closer</option></select></label><a class="tools" href="/tools/?view=tools">Tools ↗</a></div></header>
 <aside id="outreach-health-banner" class="outreach-alert-banner" role="status" aria-live="polite" hidden></aside>
@@ -112,8 +112,16 @@
   <p>“Okay, great. Thank you for choosing us, and thank you for your business. We’ll speak on [onboarding date].”</p>
  </section>
 </main>
-<main id="onboarding-page" hidden>
- <div class="title-row"><h1>Onboarding</h1></div>
+<main id="onboarding-page" class="onboarding-workspace" hidden>
+ <div class="title-row"><div><h1>Onboarding</h1><p>Read the prompt. Record their answer. Save to the customer.</p></div><button id="onboarding-refresh" type="button">Refresh customers</button></div>
+ <div class="onboarding-picker"><label>Customer / company<select id="onboarding-customer"><option value="">Choose a company</option></select></label><p id="onboarding-customer-summary"></p></div>
+ <p id="onboarding-error" role="alert" hidden></p><p id="onboarding-state" role="status" aria-live="polite"></p>
+ <div id="onboarding-empty" class="stats-section"><p>Select a customer to open their worksheet. You can also choose an active prospect and move them to Customers after confirming their contract, payment, and booked onboarding call.</p></div>
+ <form id="onboarding-form" hidden>
+  <div class="onboarding-column-head" aria-hidden="true"><span>What to ask / do</span><span>Their answer</span></div>
+  <div id="onboarding-questions"></div>
+  <div class="onboarding-save-bar"><label>Save worksheet for<select id="onboarding-customer-bottom"><option value="">Choose a company</option></select></label><div><button id="onboarding-save" class="primary" type="submit">Save worksheet</button><button id="onboarding-promote" type="button">Save &amp; move to Customers</button></div><p id="onboarding-bottom-state" role="status"></p></div>
+ </form>
 </main>
 <main id="stats-page" hidden>
  <div class="title-row"><div><h1>Data</h1><p>Daily results · Vancouver time</p></div><button id="stats-refresh">Refresh</button></div>
@@ -158,4 +166,5 @@
 <script src="/crm-assets/stats.js?v=outreach-system-1"></script>
 <script src="/crm-assets/outreach_system.js?v=outreach-inbox-3"></script>
 <script src="/crm-assets/calling.js?v=sales-onboarding-1"></script>
+<script src="/crm-assets/onboarding.js?v=1"></script>
 </body></html>

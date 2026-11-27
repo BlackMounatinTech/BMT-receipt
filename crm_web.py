@@ -55,6 +55,23 @@ def closer_questionnaire():
 def leads():
     return jsonify(leads=store.list_leads())
 
+@app.get('/api/onboarding/fields')
+def onboarding_fields():
+    from crm_onboarding import FIELDS
+    return jsonify(fields=FIELDS)
+
+@app.route('/api/leads/<int:n>/onboarding', methods=['GET','POST'])
+def onboarding_record(n):
+    import crm_onboarding
+    try:
+        if request.method=='GET': return jsonify(crm_onboarding.read(n))
+        p=request.get_json(silent=True)
+        if not isinstance(p,dict): raise ValueError('Provide the worksheet answers.')
+        return jsonify(crm_onboarding.save(n,p))
+    except store.Conflict as e: return jsonify(error=str(e)),409
+    except LookupError as e: return jsonify(error=str(e)),404
+    except (ValueError,TypeError) as e: return jsonify(error=str(e)),400
+
 @app.get('/api/outreach-inbox')
 def outreach_inbox():
     import crm_outreach_inbox
