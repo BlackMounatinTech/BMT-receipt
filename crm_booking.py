@@ -116,7 +116,7 @@ class Providers:
             data={'grant_type':'account_credentials','account_id':os.environ.get('ZOOM_ACCOUNT_ID')})
         result = request_json('POST','https://api.zoom.us/v2/users/'+quote(details['host']['zoom_user'],safe='')+'/meetings',
             mutation=True,headers={'Authorization':'Bearer '+token['access_token']},json={
-                'topic':'BMT × '+details['company']+' — Advertising Call','type':2,
+                'topic':'Black Mountain Technologies call — '+details['company'],'type':2,
                 'start_time':details['start'],'duration':30,'timezone':'UTC',
                 'settings':{'waiting_room':True,'join_before_host':False,'use_pmi':False}})
         if not result.get('id') or not result.get('join_url'):
@@ -135,7 +135,7 @@ class Providers:
             event = response.json()
         elif response.status_code == 404:
             event = request_json('POST',url,mutation=True,headers=self.google_headers(),params={'sendUpdates':'all'},json={
-                'id':event_id,'summary':'BMT × '+details['company']+' — Advertising Call',
+                'id':event_id,'summary':'Black Mountain Technologies call — '+details['company'],
                 'description':details['description']+'\n\nJoin Zoom: '+zoom_url+'\n\nTo reschedule, reply to the invitation.',
                 'location':zoom_url,'start':{'dateTime':details['start']},'end':{'dateTime':details['end']},
                 'attendees':[{'email':details['email']},{'email':details['host']['email']}],
