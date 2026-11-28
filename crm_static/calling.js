@@ -4,7 +4,7 @@
   let callBusy = false, importReady = false, connections = null, jobs = [], currentJob = null, bookingLead = null;
   const current = () => queue[position];
   const error = (id, message) => { $('#'+id).textContent = message || ''; $('#'+id).hidden = !message; };
-  const pages = ['calling','called','booking','leads','calendar','stats','system','sales-call','onboarding'];
+  const pages = ['calling','called','booked','booking','leads','calendar','stats','system','sales-call','onboarding'];
   let noteTimer=null, noteWrites=Promise.resolve(), displayedLeadId=null;
   const noteKey=id=>'bmt-call-notes:'+id;
   function localDraft(id){try{return JSON.parse(localStorage.getItem(noteKey(id))||'null');}catch{return null;}}
@@ -65,8 +65,8 @@
   };
   function page(name) {
     pages.forEach(p => $('#'+p+'-page').hidden = p !== name);
-    if (['calling','called','booking'].includes(name)) {
-      document.querySelectorAll('.main-nav button').forEach(b => b.classList.toggle('active',b.id===(name==='called'?'nav-called':'nav-calling')));
+    if (['calling','called','booked','booking'].includes(name)) {
+      document.querySelectorAll('.main-nav button').forEach(b => b.classList.toggle('active',b.id===(name==='called'?'nav-called':name==='booked'?'nav-booked':'nav-calling')));
     }
   }
   async function refreshLists() {
@@ -188,6 +188,34 @@
   $('#save-call-followup').onclick=()=>record('Follow up');
   $('#nav-calling').onclick=()=>{if(location.hash==='#calling')route();else location.hash='calling';};
   $('#nav-called').onclick=()=>{if(location.hash==='#called')route();else location.hash='called';};
+  $('#nav-booked').onclick=()=>{if(location.hash==='#booked')route();else location.hash='booked';};
+  async function refreshBooked(){
+    $('#refresh-booked').disabled=true;error('booked-error','');
+    try{
+      const [data,pending]=await Promise.all([api('/api/leads'),api('/api/booking/jobs')]);jobs=pending.jobs;
+      const rows=data.leads.filter(lead=>!lead.is_test&&lead.status==='Call booked'&&lead.call_start_utc).sort((a,b)=>a.call_start_utc.localeCompare(b.call_start_utc));
+      $('#booked-count').textContent=`${rows.length} booked ${rows.length===1?'meeting':'meetings'}`;
+      const root=$('#booked-list');root.replaceChildren();
+      if(!rows.length)root.append(el('p','empty','No booked meetings yet.'));
+      for(const lead of rows){
+        const card=el('section','called-card'),heading=el('div','called-card-heading');
+        const info=el('div','');info.append(el('h2','',lead.company),el('p','booking-hint',[lead.contact,lead.phone,lead.email].filter(Boolean).join(' · ')));
+        heading.append(info,el('span','badge',lead.confirmed_at?'Confirmed':lead.confirmation_sent_at?'Confirmation sent':'Confirmation not sent'));card.append(heading);
+        card.append(el('p','booked-time','Your time: '+new Intl.DateTimeFormat('en-US',{timeZone:'Etc/GMT+7',dateStyle:'full',timeStyle:'short'}).format(new Date(lead.call_start_utc))));
+        const zone=BMTLeadTime.labels[lead.call_zone]||BMTLeadTime.zoneFor(lead);
+        if(zone)card.append(el('p','booking-hint','Their time: '+new Intl.DateTimeFormat('en-US',{timeZone:zone,dateStyle:'medium',timeStyle:'short'}).format(new Date(lead.call_start_utc))+' · '+(lead.call_zone||zone)+' · 30 minutes'));
+        const actions=el('div','called-actions'),details=el('button','','View lead & history');details.type='button';details.onclick=()=>openLead(lead);actions.append(details);
+        const job=jobFor(lead);
+        if(job){const booking=el('button','','View booking');booking.type='button';booking.onclick=()=>{bookingLead=lead;$('#booking-company').textContent=lead.company;showResult(job);location.hash='booking';page('booking');};actions.append(booking);}
+        const email=el('button','','Edit email / resend');email.type='button';email.onclick=()=>openEmail(lead);actions.append(email);
+        if(lead.zoom_url){const zoom=el('a','','Open Zoom ↗');zoom.href=lead.zoom_url;zoom.target='_blank';zoom.rel='noopener noreferrer';actions.append(zoom);}
+        card.append(actions);root.append(card);
+      }
+      await refreshCounts();
+    }catch(e){error('booked-error',e.message);}
+    finally{$('#refresh-booked').disabled=false;}
+  }
+  $('#refresh-booked').onclick=refreshBooked;
   let calledRows=[];
   const calledOutcome=row=>row.last_call_outcome==='Booked'?'Book meeting':row.last_call_outcome;
   function renderCalled(){
@@ -222,9 +250,10 @@
     if(target==='calling') {
       page('calling');try{await refreshLists();}catch(e){error('call-error',e.message);}
     } else if(target==='called'){page('called');await refreshCalled();}
+    else if(target==='booked'){page('booked');await refreshBooked();}
     else if(target==='booking' && bookingLead) page('booking');
     else if(target==='booking'){location.hash='calling';}
-    else {$('#calling-page').hidden=true;$('#called-page').hidden=true;$('#booking-page').hidden=true;$('#nav-calling').classList.remove('active');$('#nav-called').classList.remove('active');showPage(['outreach','customers','calendar','followups','stats','system','sales-call','onboarding'].includes(target)?target:'prospects');}
+    else {$('#calling-page').hidden=true;$('#called-page').hidden=true;$('#booked-page').hidden=true;$('#booking-page').hidden=true;$('#nav-calling').classList.remove('active');$('#nav-called').classList.remove('active');$('#nav-booked').classList.remove('active');showPage(['outreach','customers','calendar','followups','stats','system','sales-call','onboarding'].includes(target)?target:'prospects');}
   }
   window.addEventListener('hashchange',route);
 
