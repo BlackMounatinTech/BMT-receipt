@@ -13,10 +13,10 @@ def schema(con):
   report TEXT,baseline TEXT NOT NULL,error TEXT)''')
  con.execute('CREATE TABLE IF NOT EXISTS crm_booked_research_worker(id INTEGER PRIMARY KEY,last_seen TEXT NOT NULL)')
 
-def company(con,lid):
+def company(con,lid,booked_only=False):
  r=con.execute('SELECT * FROM crm_leads WHERE id=?',(lid,)).fetchone()
  if not r:raise LookupError('Company not found.')
- if r['is_test'] or r['status'] not in ('Call booked','Won') or not r['call_start_utc']:raise ValueError('Choose a company from Booked.')
+ if r['is_test'] or (booked_only and r['status']!='Call booked') or r['status'] not in ('Call booked','Won') or not r['call_start_utc']:raise ValueError('Choose a company from Booked.')
  return dict(r)
 
 def public(job):
@@ -36,7 +36,7 @@ def request(lid):
  from crm_sales_call import read
  facts=read(lid)['data']
  with store.connect() as con:
-  schema(con);con.execute('BEGIN IMMEDIATE');company(con,lid)
+  schema(con);con.execute('BEGIN IMMEDIATE');company(con,lid,booked_only=True)
   active=con.execute("SELECT * FROM crm_booked_research WHERE lead_id=? AND state IN ('queued','running') ORDER BY requested_at DESC LIMIT 1",(lid,)).fetchone()
   if not active:
    con.execute("INSERT INTO crm_booked_research(id,lead_id,state,requested_at,phase,baseline) VALUES(?,?,'queued',?,'Waiting for Mac worker',?)",(uuid.uuid4().hex,lid,store.now(),json.dumps(facts)))
@@ -64,7 +64,7 @@ def strings(value,limit=30):
  return [text(x) for x in value]
 
 def validate(report,started):
- if not isinstance(report,dict) or set(report)!={'company','facebook','instagram','ads','google','talking_points'}:raise ValueError('Include company, Facebook, Instagram, ads, Google and talking points.')
+ if not isinstance(report,dict) or not {'company','facebook','ads','google','talking_points'}<=set(report) or set(report)-{'company','facebook','instagram','ads','google','talking_points'}:raise ValueError('Include company details, Facebook project photos, Meta ads and Google reputation.')
  if len(json.dumps(report))>50000:raise ValueError('Keep the research brief concise.')
  c=report['company']
  if not isinstance(c,dict):raise ValueError('Check the company research.')
@@ -74,7 +74,7 @@ def validate(report,started):
  c['sources']=[dict(url=url(s.get('url','')),checked_at=checked(s.get('checked_at',''),started),observation=text(s.get('observation',''))) for s in sources]
  if not c['identity_notes'] or not all(s['url'] and s['observation'] for s in c['sources']):raise ValueError('Explain how the company identity was matched.')
  result={'company':c}
- for channel in ('facebook','instagram'):
+ for channel in ('facebook',):
   p=report[channel]
   if not isinstance(p,dict) or p.get('status') not in PHOTO_STATES:raise ValueError('Check the photo research status.')
   seen=p.get('usable_photos_seen');reviewed=p.get('photos_reviewed')
@@ -115,15 +115,16 @@ def worker(p):
   con.execute('INSERT OR REPLACE INTO crm_booked_research_worker VALUES(1,?)',(stamp,))
   # Expired work is shown as interrupted, never silently completed or re-run.
   con.execute("UPDATE crm_booked_research SET state='interrupted',error='Mac research stopped before completion. Review and request another check.',finished_at=? WHERE state='running' AND started_at<?",(stamp,(now-timedelta(minutes=22)).isoformat()))
+  if op=='heartbeat':return dict(ok=True)
   if op=='claim':
    if con.execute("SELECT 1 FROM crm_booked_research WHERE state='running'").fetchone():return dict(job=None)
    row=con.execute("SELECT * FROM crm_booked_research WHERE state='queued' ORDER BY requested_at,rowid LIMIT 1").fetchone()
    if not row:return dict(job=None)
-   try:lead=company(con,row['lead_id'])
+   try:lead=company(con,row['lead_id'],booked_only=True)
    except (ValueError,LookupError):
     con.execute("UPDATE crm_booked_research SET state='cancelled',finished_at=?,phase='Company is no longer booked' WHERE id=?",(stamp,row['id']));return dict(job=None)
    con.execute("UPDATE crm_booked_research SET state='running',started_at=?,heartbeat=?,phase='Checking company identity' WHERE id=?",(stamp,stamp,row['id']))
-   return dict(job=dict(id=row['id'],lead_id=row['lead_id'],company=lead['company'],contact=lead['contact'],location=lead['location'],phone=lead['phone'],website=lead['website'],instagram=lead['instagram'],research=lead['need'],started_at=stamp,work_minutes=15))
+   return dict(job=dict(id=row['id'],lead_id=row['lead_id'],company=lead['company'],contact=lead['contact'],location=lead['location'],phone=lead['phone'],website=lead['website'],research=lead['need'],started_at=stamp,work_minutes=15))
   row=con.execute('SELECT * FROM crm_booked_research WHERE id=?',(p.get('job_id'),)).fetchone()
   if not row or row['state']!='running':raise ValueError('This research job is not running.')
   if op=='progress':
@@ -132,7 +133,7 @@ def worker(p):
    con.execute("UPDATE crm_booked_research SET state='blocked',error=?,finished_at=?,phase='Research needs attention' WHERE id=?",(text(p.get('reason','Could not inspect sources.')),stamp,row['id']));return dict(ok=True)
   if op!='finish':raise ValueError('Choose a valid research action.')
   report=validate(p.get('report'),row['started_at'])
-  partial=any(report[k]['status'] in ('unavailable','unverified') for k in ('facebook','instagram','ads','google'))
+  partial=any(report[k]['status'] in ('unavailable','unverified') for k in ('facebook','ads','google'))
   from crm_sales_call import schema as facts_schema
   facts_schema(con)
   facts=con.execute('SELECT * FROM crm_sales_call_facts WHERE lead_id=?',(row['lead_id'],)).fetchone()
@@ -141,7 +142,7 @@ def worker(p):
   if report['company']['service_areas']:updates['service_areas']=', '.join(report['company']['service_areas'])[:2000]
   g=report['google']
   if g['status']=='verified':updates['google_reviews']=f'{g["rating"]:g} stars from {g["reviews"]} reviews' if g['rating'] is not None else '0 reviews'
-  photos=[report[k] for k in ('facebook','instagram') if report[k]['status']=='verified']
+  photos=[report[k] for k in ('facebook',) if report[k]['status']=='verified']
   if any(x['before_after']=='yes' for x in photos):updates['project_photos']='Before-and-after photos verified'
   elif any(x['usable_photos_seen'] for x in photos):updates['project_photos']='Completed-project photos verified'
   for k,v in updates.items():

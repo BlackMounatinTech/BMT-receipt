@@ -14,11 +14,11 @@
   paragraph('“Hey, how’s it going? Good. Let’s just jump right into this.');
   paragraph(`I’ve already done some research on your company, ${record.company}. I know that you’re located in ${record.location||'[location — confirm]'}. Your services include ${d.services||'[services — confirm]'}. Here are probably a few of your service areas: ${d.service_areas||'[service areas — confirm]'}.`);
   paragraph(record.company_research?.google.status==='unverified'?'[Google rating and review count — unverified in the latest research check.]':d.google_reviews?`I see that you have ${d.google_reviews} on Google.`:'[Google rating and review count — confirm before mentioning.]');
-  if((!record.company_research||[record.company_research.facebook,record.company_research.instagram].some(p=>p.status==='verified'&&p.before_after==='yes'))&&d.project_photos==='Before-and-after photos verified')paragraph('I see that you definitely have some before-and-after photos.');
-  else if((!record.company_research||[record.company_research.facebook,record.company_research.instagram].some(p=>p.status==='verified'&&p.usable_photos_seen>0))&&d.project_photos==='Completed-project photos verified')paragraph('I see that you have photos of your completed projects.');
+  if((!record.company_research||[record.company_research.facebook].some(p=>p.status==='verified'&&p.before_after==='yes'))&&d.project_photos==='Before-and-after photos verified')paragraph('I see that you definitely have some before-and-after photos.');
+  else if((!record.company_research||[record.company_research.facebook].some(p=>p.status==='verified'&&p.usable_photos_seen>0))&&d.project_photos==='Completed-project photos verified')paragraph('I see that you have photos of your completed projects.');
   else if(!d.project_photos)paragraph('[Project photos — not checked yet. Confirm before mentioning.]');
   const research=record.company_research;
-  if(research){for(const [name,p] of [['Facebook',research.facebook],['Instagram',research.instagram]]){if(p.status==='verified'&&p.usable_photos_seen)paragraph(`I counted at least ${p.usable_photos_seen} usable project photos on your ${name}.`);}
+  if(research){for(const [name,p] of [['Facebook',research.facebook]]){if(p.status==='verified'&&p.usable_photos_seen)paragraph(`I counted at least ${p.usable_photos_seen} usable project photos on your ${name}.`);}
    if(research.ads.status==='running')paragraph('I can see that you’re currently running Meta ads.');
   }
   paragraph('Correct me if I got any of that wrong.');

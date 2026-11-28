@@ -21,7 +21,7 @@ class BookedResearchTests(unittest.TestCase):
   original=store.list_leads();a=research.request(self.id);b=research.request(self.id);self.assertEqual(a['job']['id'],b['job']['id']);self.assertEqual(a['job']['state'],'queued')
   job=research.worker({'op':'claim'})['job'];self.assertEqual(job['company'],'Concrete Co');self.assertIsNone(research.worker({'op':'claim'})['job'])
   research.worker({'op':'finish','job_id':job['id'],'report':self.report(job)})
-  s=research.status(self.id);self.assertEqual(s['job']['state'],'partial');self.assertTrue(s['worker_online']);self.assertEqual(s['report']['facebook']['photo_bucket'],'10+');self.assertEqual(s['report']['instagram']['photo_bucket'],'Unknown')
+  s=research.status(self.id);self.assertEqual(s['job']['state'],'complete');self.assertTrue(s['worker_online']);self.assertEqual(s['report']['facebook']['photo_bucket'],'10+');self.assertNotIn('instagram',s['report'])
   f=facts.read(self.id);self.assertEqual(f['data']['google_reviews'],'4.9 stars from 42 reviews');self.assertEqual(f['company_research']['ads']['status'],'running')
   self.assertEqual(store.list_leads(),original)
  def test_new_research_preserves_answers_and_manually_updated_facts(self):
@@ -45,6 +45,18 @@ class BookedResearchTests(unittest.TestCase):
   cold=store.add_lead('Cold',phone='6025550101')
   with self.assertRaises(ValueError):research.request(cold)
   with store.connect() as con:con.execute('UPDATE crm_leads SET is_test=1 WHERE id=?',(self.id,))
+  with self.assertRaises(ValueError):research.request(self.id)
+ def test_research_and_outreach_credentials_do_not_cross_authorize(self):
+  import hashlib
+  with patch.dict(crm_web.app.config,{'OUTREACH_WORKER_HASH':hashlib.sha256(b'outreach-key').hexdigest(),'BOOKED_RESEARCH_WORKER_HASH':hashlib.sha256(b'research-key').hexdigest()}):
+   route='/api/booked-research/worker'
+   self.assertEqual(self.client.post(route,json={'op':'heartbeat'},headers={**self.headers,'X-BMT-Outreach-Key':'outreach-key'}).status_code,403)
+   self.assertEqual(self.client.post(route,json={'op':'heartbeat'},headers={**self.headers,'X-BMT-Research-Key':'research-key'}).status_code,200)
+   self.assertEqual(self.client.post('/api/outreach-system',json={'op':'claim'},headers={**self.headers,'X-BMT-Research-Key':'research-key'}).status_code,403)
+ def test_partial_check_and_paying_customer_cannot_start_new_research(self):
+  job=self.claim();r=self.report(job);r['facebook'].update(status='unavailable',usable_photos_seen=None,photos_reviewed=None,before_after='unverified',source_url='',notes='Facebook login required.')
+  research.worker({'op':'finish','job_id':job['id'],'report':r});self.assertEqual(research.status(self.id)['job']['state'],'partial')
+  with store.connect() as con:con.execute("UPDATE crm_leads SET status='Won' WHERE id=?",(self.id,))
   with self.assertRaises(ValueError):research.request(self.id)
  def test_interruption_does_not_fabricate_completed_research(self):
   job=self.claim();research.worker({'op':'fail','job_id':job['id'],'reason':'Instagram and Facebook could not be inspected.'})

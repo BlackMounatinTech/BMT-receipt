@@ -123,9 +123,19 @@ def booked_company_research(n):
     except LookupError as e:return jsonify(error=str(e)),404
     except (ValueError,TypeError) as e:return jsonify(error=str(e)),400
 
+def booked_research_operator():
+    import hashlib
+    from pathlib import Path
+    expected=app.config.get('BOOKED_RESEARCH_WORKER_HASH')
+    if expected is None:
+        path=Path(__file__).with_name('crm_booked_research_worker.sha256')
+        expected=path.read_text().strip() if path.exists() else ''
+    supplied=request.headers.get('X-BMT-Research-Key','')
+    return bool(expected and supplied and hmac.compare_digest(hashlib.sha256(supplied.encode()).hexdigest(),expected))
+
 @app.post('/api/booked-research/worker')
 def booked_research_worker():
-    if not outreach_operator():return jsonify(error='Connect the Mac research worker first.'),403
+    if not booked_research_operator():return jsonify(error='Connect the booked-prospect research worker first.'),403
     import crm_booked_research as research
     try:return jsonify(research.worker(request.get_json(silent=True)))
     except LookupError as e:return jsonify(error=str(e)),404

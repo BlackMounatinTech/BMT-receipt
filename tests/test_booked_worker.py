@@ -1,9 +1,9 @@
 import json,sys,tempfile,unittest
 from pathlib import Path
 from unittest.mock import Mock,patch
-sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'outreach_worker'))
-import booked
-ROOT=Path(__file__).resolve().parents[1]/'outreach_worker'
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'booked_research_worker'))
+import job as booked
+ROOT=Path(__file__).resolve().parents[1]/'booked_research_worker'
 class BookedWorkerTests(unittest.TestCase):
  def test_no_job_does_not_start_ai_or_touch_outreach(self):
   request=Mock(return_value={'job':None})

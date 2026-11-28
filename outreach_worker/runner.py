@@ -49,14 +49,10 @@ def prepare_prompt(template,claim):
 
 def tick():
     LOCAL.mkdir(parents=True,exist_ok=True)
-    with (LOCAL/'run.lock').open('w') as lock:
+    with (LOCAL.parent/'bmt-browser-worker.lock').open('w') as lock:
         try:fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
         except BlockingIOError:return
         request('POST',{'op':'heartbeat','state':'Mac worker connected'})
-        cfg=json.loads((LOCAL/'config.json').read_text())
-        if cfg.get('booked_research'):
-            from booked import run_booked
-            if run_booked(ROOT,LOCAL,request):return
         claim=request('POST',{'op':'claim'})
         if not claim.get('run'):return
         ident=claim['run'];folder=LOCAL/'runs'/ident;folder.mkdir(parents=True);os.chmod(folder,0o700)
