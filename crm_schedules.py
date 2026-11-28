@@ -43,6 +43,8 @@ def imported():
     with store.connect() as con:
         schema(con)
         rows=[dict(r) for r in con.execute('''SELECT l.*,
+            EXISTS(SELECT 1 FROM crm_call_items pi JOIN crm_call_lists pl ON pl.id=pi.list_id
+                   WHERE pi.lead_id=l.id AND pl.priority_schedule='saturday') AS saturday_priority,
             COALESCE(n.text,(SELECT SUBSTR(text,INSTR(text,CHAR(10))+1) FROM crm_notes WHERE lead_id=l.id AND text LIKE 'Phone: %' AND INSTR(text,CHAR(10))>0 ORDER BY id DESC LIMIT 1),'') AS call_notes,COALESCE(n.version,0) AS note_version
             FROM crm_leads l LEFT JOIN crm_call_notes n ON n.lead_id=l.id
             WHERE EXISTS(SELECT 1 FROM crm_call_items i WHERE i.lead_id=l.id)''')]
@@ -113,7 +115,7 @@ def select(kind,rows,instant=None):
         row=dict(lead);row.update(outcome=lead.get('last_call_outcome'),called_at=lead.get('last_called_at'),
             opening_minute=min(p[0] for p in matches),closing_minute=max(p[1] for p in matches),schedule_date=target.isoformat())
         picked.append(row)
-    picked.sort(key=lambda r:((saturday_hours_priority(r,target) if kind=='saturday' else ())+
+    picked.sort(key=lambda r:((saturday_hours_priority(r,target)+(0 if r.get('saturday_priority') else 1,) if kind=='saturday' else ())+
                              (r['opening_minute'],r['company'].casefold(),r['id'])))
     for i,row in enumerate(picked):row['position']=i
     return picked

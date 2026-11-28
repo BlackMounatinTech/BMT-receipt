@@ -66,6 +66,27 @@ class ScheduleTests(unittest.TestCase):
         noon['business_hours']=json.dumps({'weekly':{'6':[[360,720]]}})
         self.assertEqual([r['id'] for r in schedule.select('sunday',[normal,noon],NOW)],[2,1])
 
+    def test_priority_batch_precedes_ordinary_hours_but_not_suspect_hours(self):
+        rows=[lead(1,'Arizona',{'5':[[360,1020]]}),
+              lead(2,'Arizona',{'5':[[480,1020]]}),
+              lead(3,'Arizona',{'5':[[420,1020]]}),
+              lead(4,'Arizona',{'5':[[0,1440]]})]
+        for r in rows:
+            h=json.loads(r['business_hours']);h.update(source='Published',source_url='https://example.com',checked_at='2026-11-28')
+            r['business_hours']=json.dumps(h)
+        for r in rows[1:]:r['saturday_priority']=1
+        self.assertEqual([r['id'] for r in schedule.select('saturday',rows,NOW)],[3,2,1,4])
+
+    def test_priority_import_persists_and_rejects_invalid_schedule(self):
+        with tempfile.TemporaryDirectory() as tmp,patch.dict(os.environ,{'BMT_DATA_DIR':tmp}):
+            seed=dict(company='Builder',phone='2065550100',location='Seattle, WA',email='',contact='',need='',website='',call_zone='Pacific (US)')
+            with self.assertRaises(ValueError):calling.import_list('Bad',[seed],True,'unknown')
+            result=calling.import_list('Saturday',[seed],True,'saturday')
+            rows=schedule.imported()
+            self.assertEqual(len(rows),1)
+            self.assertEqual(rows[0]['saturday_priority'],1)
+            self.assertEqual(calling.call_counts()['total'],0)
+
     def test_24_hour_periods_merge_across_company_local_midnight(self):
         row=lead(1,'Pacific (US)',{str(i):[[0,1440]] for i in range(7)})
         result=schedule.select('daytime',[row],NOW)[0]

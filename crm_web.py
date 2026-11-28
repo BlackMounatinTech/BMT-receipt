@@ -280,7 +280,8 @@ def import_call_sheet():
         if not file or not file.filename:
             raise ValueError('Choose a lead sheet.')
         result = crm_calling.import_list(request.form.get('name') or file.filename,
-            crm_calling.rows_from_file(file),commit=request.form.get('commit')=='true')
+            crm_calling.rows_from_file(file),commit=request.form.get('commit')=='true',
+            priority_schedule=request.form.get('priority_schedule',''))
         return jsonify(result)
     except (ValueError,UnicodeError,TypeError) as e:
         return jsonify(error=str(e)),400

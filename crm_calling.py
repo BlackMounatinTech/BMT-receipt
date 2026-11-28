@@ -11,6 +11,8 @@ def schema(con):
     con.execute('''
       CREATE TABLE IF NOT EXISTS crm_call_lists (
         id TEXT PRIMARY KEY, name TEXT NOT NULL, created_at TEXT NOT NULL)''')
+    if 'priority_schedule' not in {r[1] for r in con.execute('PRAGMA table_info(crm_call_lists)')}:
+        con.execute("ALTER TABLE crm_call_lists ADD COLUMN priority_schedule TEXT NOT NULL DEFAULT ''")
     con.execute('''
       CREATE TABLE IF NOT EXISTS crm_call_items (
         list_id TEXT NOT NULL REFERENCES crm_call_lists(id),
@@ -128,7 +130,9 @@ def rows_from_file(file):
     return clean
 
 
-def import_list(name, rows, commit=False):
+def import_list(name, rows, commit=False, priority_schedule=''):
+    if priority_schedule not in ('','saturday'):
+        raise ValueError('Choose a supported priority schedule.')
     name = (name or 'Imported leads').strip()[:200]
     with store.connect() as con:
         schema(con)
@@ -142,7 +146,7 @@ def import_list(name, rows, commit=False):
         summary = dict(new=0, existing=0, duplicates=0, excluded=0, total=0)
         list_id = uuid.uuid4().hex
         if commit:
-            con.execute('INSERT INTO crm_call_lists VALUES(?,?,?)', (list_id,name,store.now()))
+            con.execute('INSERT INTO crm_call_lists(id,name,created_at,priority_schedule) VALUES(?,?,?,?)', (list_id,name,store.now(),priority_schedule))
         for item in rows:
             key = phone_key(item['phone'])
             name_key = (item['company'].casefold(), item['location'].casefold())
