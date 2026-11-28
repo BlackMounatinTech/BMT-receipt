@@ -2,7 +2,7 @@
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="csrf" content="{{ csrf }}"><title>BMT CRM</title>
-<link rel="stylesheet" href="/crm-assets/crm.css?v=hourly-calendar-1">
+<link rel="stylesheet" href="/crm-assets/crm.css?v=sales-call-prospect-1">
 </head><body>
 <header><a class="brand" href="/">BMT <span>CRM</span></a><nav class="main-nav" aria-label="Main navigation"><button id="nav-calling">Calling</button><button id="nav-called">Called</button><button id="nav-booked">Booked</button><button id="nav-followups">Follow-ups</button><button id="nav-outreach">Outreach</button><button id="nav-system">Outreach System</button><button id="nav-leads" class="active">Active prospects</button><button id="nav-customers">Customers</button><button id="nav-calendar">Calendar</button><button id="nav-stats">Data</button><button id="nav-sales-call">Sales Call</button><button id="nav-onboarding">Onboarding</button></nav><div class="header-right"><div class="call-counter" aria-label="Calls, booked meetings and closes"><div aria-live="polite"><span><strong id="calls-today">—</strong> Today</span><span><strong id="calls-total">—</strong> Overall</span><span title="Companies with a booked meeting, including those subsequently won"><strong id="meetings-booked">—</strong> Booked</span><span title="Deals marked Won"><strong id="deals-closed">—</strong> Closes</span></div><button id="new-call-day" title="Reset today’s count; keep the overall total">New day</button><small id="counter-error" role="status" hidden></small></div><label class="person">Using as <select id="person"><option>Michael</option><option>Closer</option></select></label><a class="tools" href="/tools/?view=tools">Tools ↗</a></div></header>
 <aside id="outreach-health-banner" class="outreach-alert-banner" role="status" aria-live="polite" hidden></aside>
@@ -89,11 +89,25 @@
  <details class="stats-section"><summary>Run history</summary><div id="system-runs"></div></details>
 </main>
 <main id="sales-call-page" class="sales-playbook" hidden>
- <div class="title-row"><h1>Sales Call</h1></div>
+ <div class="title-row"><h1>Sales Call</h1><button id="sales-prospects-refresh" type="button">Refresh prospects</button></div>
+ <div class="onboarding-picker"><label>Choose a prospect<select id="sales-prospect"><option value="">Choose a prospect from Booked</option></select></label><p id="sales-prospect-summary"></p></div>
+ <p id="sales-prospect-error" role="alert" hidden></p>
+ <div id="sales-prospect-context" hidden>
+  <details class="sales-email"><summary>Company research · check or update the facts</summary>
+   <p class="booking-hint">Fill in facts you have checked. Blank fields stay marked for confirmation in the opening.</p>
+   <form id="sales-facts-form">
+    <label>Services<input name="services" maxlength="2000" placeholder="Their actual services"></label>
+    <label>Service areas<input name="service_areas" maxlength="2000" placeholder="Cities or areas they serve"></label>
+    <label>Google rating and reviews<input name="google_reviews" maxlength="2000" placeholder="For example: 4.8 stars from 45 reviews"></label>
+    <label>Project photos<select name="project_photos"><option value="">Not checked</option><option>Before-and-after photos verified</option><option>Completed-project photos verified</option><option>No project photos found</option></select></label>
+    <label>Research sources / links<textarea name="sources" rows="2" maxlength="2000"></textarea></label>
+    <button class="primary" type="submit">Save company facts</button><p id="sales-facts-state" role="status"></p>
+   </form>
+   <h3>Saved prospect notes</h3><p id="sales-saved-research" class="sales-research-notes"></p>
+  </details>
+ </div>
  <section class="stats-section"><h2>1. Opening</h2>
-  <p>“Hey, how’s it going? Good. Let’s jump right into this and waste no time.</p>
-  <p>I’m going to ask you a bunch of questions to see if I can help you with your advertising. I’m quite sure I can because of <strong>[the specific things in my notes about your company and ads]</strong>.</p>
-  <p>Then I’ll explain how the advertising works, and we’ll talk about the contract at the end. Does that sound fair?”</p>
+  <div id="sales-opening"><p class="booking-hint">Choose a booked prospect above to load their opening.</p></div>
  </section>
  <section class="stats-section"><h2>2. Questions</h2><p class="booking-hint">Questions to be added.</p></section>
  <section class="stats-section"><h2>3. Explain the advertising</h2>
@@ -188,5 +202,6 @@
 <script src="/crm-assets/outreach_system.js?v=outreach-inbox-3"></script>
 <script src="/crm-assets/calling.js?v=calling-refresh-order-2"></script>
 <script src="/crm-assets/onboarding.js?v=onboarding-audit-3"></script>
-<script src="/crm-assets/customers.js?v=1"></script>
+<script src="/crm-assets/customers.js?v=sales-prospect-2"></script>
+<script src="/crm-assets/sales_call.js?v=1"></script>
 </body></html>

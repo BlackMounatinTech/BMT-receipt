@@ -55,6 +55,16 @@ def closer_questionnaire():
 def leads():
     return jsonify(leads=store.list_leads())
 
+@app.route('/api/leads/<int:n>/sales-call',methods=['GET','POST'])
+def sales_call_facts(n):
+    import crm_sales_call
+    try:
+        return jsonify(crm_sales_call.read(n) if request.method=='GET' else crm_sales_call.save(n,request.get_json(silent=True)))
+    except store.Conflict as e:return jsonify(error=str(e)),409
+    except LookupError as e:return jsonify(error=str(e)),404
+    except (ValueError,TypeError) as e:return jsonify(error=str(e)),400
+
+
 @app.get('/api/onboarding/fields')
 def onboarding_fields():
     from crm_onboarding import FIELDS
