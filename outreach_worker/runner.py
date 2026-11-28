@@ -53,6 +53,10 @@ def tick():
         try:fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
         except BlockingIOError:return
         request('POST',{'op':'heartbeat','state':'Mac worker connected'})
+        cfg=json.loads((LOCAL/'config.json').read_text())
+        if cfg.get('booked_research'):
+            from booked import run_booked
+            if run_booked(ROOT,LOCAL,request):return
         claim=request('POST',{'op':'claim'})
         if not claim.get('run'):return
         ident=claim['run'];folder=LOCAL/'runs'/ident;folder.mkdir(parents=True);os.chmod(folder,0o700)

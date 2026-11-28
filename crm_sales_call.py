@@ -12,13 +12,16 @@ def schema(con):
         con.execute("ALTER TABLE crm_sales_call_facts ADD COLUMN answers TEXT NOT NULL DEFAULT '{}'")
 
 def read(lead_id):
+    from crm_booked_research import status
+    try:briefing=status(lead_id)
+    except ValueError:briefing={'report':None,'checked_at':None}
     with store.connect() as con:
         schema(con)
         lead=con.execute('SELECT * FROM crm_leads WHERE id=?',(lead_id,)).fetchone()
         if not lead:raise LookupError('Prospect not found.')
         row=con.execute('SELECT * FROM crm_sales_call_facts WHERE lead_id=?',(lead_id,)).fetchone()
         call_notes=con.execute('SELECT text FROM crm_call_notes WHERE lead_id=?',(lead_id,)).fetchone() if con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='crm_call_notes'").fetchone() else None
-        return dict(call_notes=call_notes['text'] if call_notes else '',lead=dict(lead),history=[dict(n) for n in con.execute('SELECT text,created_at FROM crm_notes WHERE lead_id=? ORDER BY id',(lead_id,))],lead_id=lead_id,company=lead['company'],location=lead['location'],contact=lead['contact'],
+        return dict(company_research=briefing['report'],research_checked_at=briefing['checked_at'],call_notes=call_notes['text'] if call_notes else '',lead=dict(lead),history=[dict(n) for n in con.execute('SELECT text,created_at FROM crm_notes WHERE lead_id=? ORDER BY id',(lead_id,))],lead_id=lead_id,company=lead['company'],location=lead['location'],contact=lead['contact'],
             phone=lead['phone'],email=lead['email'],website=lead['website'],research=lead['need'],call_start_utc=lead['call_start_utc'],
             lead_timezone=lead['lead_timezone'],call_zone=lead['call_zone'],status=lead['status'],
             answers=json.loads(row['answers']) if row else {},

@@ -10,13 +10,13 @@ from urllib.request import Request, build_opener, HTTPCookieProcessor
 
 CONFIG=Path.home()/'.config/bmt-outreach-system/config.json'
 
-def request(method='GET',payload=None):
+def request(method='GET',payload=None,path='/api/outreach-system'):
     cfg=json.loads(CONFIG.read_text())
     opener=build_opener(HTTPCookieProcessor(http.cookiejar.CookieJar()))
     page=opener.open(cfg['base_url']+'/',timeout=30).read().decode()
     csrf=re.search(r'name="csrf" content="([^"]+)"',page)[1]
     body=json.dumps(payload).encode() if payload is not None else None
-    req=Request(cfg['base_url']+'/api/outreach-system',data=body,method=method,
+    req=Request(cfg['base_url']+path,data=body,method=method,
                 headers={'Content-Type':'application/json','X-CSRF-Token':csrf,'X-BMT-Outreach-Key':cfg['key']})
     try:
         with opener.open(req,timeout=30) as response:return json.load(response)
@@ -29,6 +29,7 @@ if __name__=='__main__':
     try:
         if len(sys.argv)==1 or sys.argv[1]=='get':result=request()
         elif sys.argv[1]=='post':result=request('POST',json.loads(Path(sys.argv[2]).read_text()))
+        elif sys.argv[1]=='booked-post':result=request('POST',json.loads(Path(sys.argv[2]).read_text()),path='/api/booked-research/worker')
         elif sys.argv[1]=='connect-link':
             raise ValueError('Worker credentials cannot create owner-access links. Use an existing owner browser session or authenticated Render administrator recovery.')
         else:raise ValueError('Use get, post FILE, or connect-link.')

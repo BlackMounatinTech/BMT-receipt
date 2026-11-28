@@ -116,6 +116,21 @@ def sales_onboarding_appointments():
     from crm_sales_close import appointments
     return jsonify(appointments=appointments())
 
+@app.route('/api/leads/<int:n>/booked-research',methods=['GET','POST'])
+def booked_company_research(n):
+    import crm_booked_research as research
+    try:return jsonify(research.status(n) if request.method=='GET' else research.request(n))
+    except LookupError as e:return jsonify(error=str(e)),404
+    except (ValueError,TypeError) as e:return jsonify(error=str(e)),400
+
+@app.post('/api/booked-research/worker')
+def booked_research_worker():
+    if not outreach_operator():return jsonify(error='Connect the Mac research worker first.'),403
+    import crm_booked_research as research
+    try:return jsonify(research.worker(request.get_json(silent=True)))
+    except LookupError as e:return jsonify(error=str(e)),404
+    except (ValueError,TypeError) as e:return jsonify(error=str(e)),400
+
 @app.get('/api/sales-call/questions')
 def sales_questions():
     from crm_sales_questions import definition

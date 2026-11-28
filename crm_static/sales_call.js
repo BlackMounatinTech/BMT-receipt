@@ -13,10 +13,14 @@
   const d=values();
   paragraph('“Hey, how’s it going? Good. Let’s just jump right into this.');
   paragraph(`I’ve already done some research on your company, ${record.company}. I know that you’re located in ${record.location||'[location — confirm]'}. Your services include ${d.services||'[services — confirm]'}. Here are probably a few of your service areas: ${d.service_areas||'[service areas — confirm]'}.`);
-  paragraph(d.google_reviews?`I see that you have ${d.google_reviews} on Google.`:'[Google rating and review count — confirm before mentioning.]');
-  if(d.project_photos==='Before-and-after photos verified')paragraph('I see that you definitely have some before-and-after photos.');
-  else if(d.project_photos==='Completed-project photos verified')paragraph('I see that you have photos of your completed projects.');
+  paragraph(record.company_research?.google.status==='unverified'?'[Google rating and review count — unverified in the latest research check.]':d.google_reviews?`I see that you have ${d.google_reviews} on Google.`:'[Google rating and review count — confirm before mentioning.]');
+  if((!record.company_research||[record.company_research.facebook,record.company_research.instagram].some(p=>p.status==='verified'&&p.before_after==='yes'))&&d.project_photos==='Before-and-after photos verified')paragraph('I see that you definitely have some before-and-after photos.');
+  else if((!record.company_research||[record.company_research.facebook,record.company_research.instagram].some(p=>p.status==='verified'&&p.usable_photos_seen>0))&&d.project_photos==='Completed-project photos verified')paragraph('I see that you have photos of your completed projects.');
   else if(!d.project_photos)paragraph('[Project photos — not checked yet. Confirm before mentioning.]');
+  const research=record.company_research;
+  if(research){for(const [name,p] of [['Facebook',research.facebook],['Instagram',research.instagram]]){if(p.status==='verified'&&p.usable_photos_seen)paragraph(`I counted at least ${p.usable_photos_seen} usable project photos on your ${name}.`);}
+   if(research.ads.status==='running')paragraph('I can see that you’re currently running Meta ads.');
+  }
   paragraph('Correct me if I got any of that wrong.');
   paragraph('But I do need to ask you more questions about your company, your goals, where you’re headed, and the types of jobs you actually want more of. That’ll give me a better understanding of your business so I can see what actually helps.');
   paragraph('Because when I give you our guarantee, I don’t want to be blowing smoke up your ass. I want you to understand your situation and be confident that we can deliver. Does that sound fair?”');
@@ -65,7 +69,7 @@
    for(const k of keys)form.elements.namedItem(k).value=d[k]||'';
    if(!answerData.trade){const text=[data.company,d.services,data.research].join(' ');answerData.trade=/excavat|grading/i.test(text)?'Excavation':/concrete/i.test(text)?'Concrete':/deck|fenc|gazebo|pergola|carpentry/i.test(text)?'Carpentry':/landscap|hardscap|paver/i.test(text)?'Landscaping':'';}
    $('#sales-prospect-context').hidden=false;questions.hidden=false;$('#sales-questions-empty').hidden=true;$('#sales-prospect-summary').textContent=[data.company,data.contact,data.location].filter(Boolean).join(' · ');
-   bookedDetails(data);buildQuestions();state(stale?'Older local draft loaded. Load saved answers to review the latest CRM record.':dirty?'Local draft recovered. Save answers to sync.':'Saved company details and answers loaded.');
+   bookedDetails(data);window.BMTBookedResearch?.brief($('#sales-research-brief'),data.company_research,data.research_checked_at);buildQuestions();state(stale?'Older local draft loaded. Load saved answers to review the latest CRM record.':dirty?'Local draft recovered. Save answers to sync.':'Saved company details and answers loaded.');
    localStorage.setItem('bmt-sales-prospect',id);document.dispatchEvent(new CustomEvent('crm-sales-prospect-selected',{detail:{id}}));draw();
   }catch(e){if(current===ticket)error(e.message);}
  }
@@ -77,7 +81,7 @@
    const rows=data.leads.filter(l=>!l.is_test&&l.call_start_utc&&(l.status==='Call booked'||(l.status==='Won'&&String(l.id)===selected))).sort((a,b)=>a.call_start_utc.localeCompare(b.call_start_utc));
    picker.replaceChildren(new Option(rows.length?'Choose a prospect from Booked':'No booked prospects yet',''));
    for(const r of rows)picker.add(new Option(r.company+(r.contact?' · '+r.contact:''),r.id));
-   const id=rows.some(r=>String(r.id)===selected)?selected:'';picker.value=id;if(!record||String(record.lead_id)!==id)await choose(id);
+   const id=rows.some(r=>String(r.id)===selected)?selected:'';picker.value=id;await choose(id);
   }catch(e){error(e.message);}finally{if(current===refreshTicket)$('#sales-prospects-refresh').disabled=false;}
  }
  picker.onchange=()=>choose(picker.value);form.oninput=changed;form.onsubmit=questions.onsubmit=e=>{e.preventDefault();save();};

@@ -209,7 +209,7 @@
         if(job){const booking=el('button','','View booking');booking.type='button';booking.onclick=()=>{bookingLead=lead;$('#booking-company').textContent=lead.company;showResult(job);location.hash='booking';page('booking');};actions.append(booking);}
         const email=el('button','','Edit email / resend');email.type='button';email.onclick=()=>openEmail(lead);actions.append(email);
         if(lead.zoom_url){const zoom=el('a','','Open Zoom ↗');zoom.href=lead.zoom_url;zoom.target='_blank';zoom.rel='noopener noreferrer';actions.append(zoom);}
-        card.append(actions);root.append(card);
+        card.append(actions);window.BMTBookedResearch?.attach(lead,card);root.append(card);
       }
       await refreshCounts();
     }catch(e){error('booked-error',e.message);}
