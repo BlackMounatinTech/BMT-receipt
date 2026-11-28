@@ -8,7 +8,8 @@ def run_booked(root,local,request):
  cfg=json.loads((local/'config.json').read_text())
  prompt=(root/'booked_workflow.txt').read_text().replace('{{JOB}}',json.dumps(job,ensure_ascii=False)).replace('{{CLIENT}}',str(root/'client.py')).replace('{{RUN_DIR}}',str(folder))
  (folder/'prompt.txt').write_text(prompt)
- command=[cfg['codex_path'],'-a','never','-c','mcp_servers.playwright.enabled=false','-c','mcp_servers.mobile-next.enabled=false','exec','--ephemeral','--json','-s','danger-full-access','--skip-git-repo-check','-C',str(root),'-o',str(folder/'summary.txt'),'-']
+ from cli import resolve
+ command=[resolve(cfg),'-a','never','-c','mcp_servers.playwright.enabled=false','-c','mcp_servers.mobile-next.enabled=false','exec','--ephemeral','--json','-s','danger-full-access','--skip-git-repo-check','-C',str(root),'-o',str(folder/'summary.txt'),'-']
  try:
   with (folder/'events.jsonl').open('w') as log:
    os.chmod(folder/'events.jsonl',0o600);process=subprocess.Popen(command,stdin=subprocess.PIPE,stdout=log,stderr=subprocess.STDOUT,start_new_session=True)

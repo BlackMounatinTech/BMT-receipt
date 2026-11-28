@@ -61,7 +61,8 @@ def tick():
         if not claim.get('run'):return
         ident=claim['run'];folder=LOCAL/'runs'/ident;folder.mkdir(parents=True);os.chmod(folder,0o700)
         cfg=json.loads((LOCAL/'config.json').read_text())
-        codex=cfg['codex_path']
+        from cli import resolve
+        codex=resolve(cfg)
         prompt=(ROOT/'workflow.txt').read_text().replace('{{RUN_ID}}',ident).replace('{{CLIENT}}',str(ROOT/'client.py')).replace('{{RUN_DIR}}',str(folder))
         prompt=prepare_prompt(prompt,claim)
         probe=LOCAL/'diagnostic-once.txt'
