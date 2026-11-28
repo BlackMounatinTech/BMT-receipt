@@ -2,7 +2,7 @@
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="csrf" content="{{ csrf }}"><title>BMT CRM</title>
-<link rel="stylesheet" href="/crm-assets/crm.css?v=booked-research-3">
+<link rel="stylesheet" href="/crm-assets/crm.css?v=onboarding-sliders-4">
 </head><body>
 <header><a class="brand" href="/">BMT <span>CRM</span></a><nav class="main-nav" aria-label="Main navigation"><button id="nav-calling">Calling</button><button id="nav-called">Called</button><button id="nav-booked">Booked</button><button id="nav-followups">Follow-ups</button><button id="nav-outreach">Outreach</button><button id="nav-system">Outreach System</button><button id="nav-leads" class="active">Active prospects</button><button id="nav-customers">Customers</button><button id="nav-calendar">Calendar</button><button id="nav-stats">Data</button><button id="nav-sales-call">Sales Call</button><button id="nav-onboarding">Onboarding</button></nav><div class="header-right"><div class="call-counter" aria-label="Calls, booked meetings and closes"><div aria-live="polite"><span><strong id="calls-today">—</strong> Today</span><span><strong id="calls-total">—</strong> Overall</span><span title="Companies with a booked meeting, including those subsequently won"><strong id="meetings-booked">—</strong> Booked</span><span title="Deals marked Won"><strong id="deals-closed">—</strong> Closes</span></div><button id="new-call-day" title="Reset today’s count; keep the overall total">New day</button><small id="counter-error" role="status" hidden></small></div><label class="person">Using as <select id="person"><option>Michael</option><option>Closer</option></select></label><a class="tools" href="/tools/?view=tools">Tools ↗</a></div></header>
 <aside id="outreach-health-banner" class="outreach-alert-banner" role="status" aria-live="polite" hidden></aside>
@@ -136,12 +136,21 @@
    <label class="sale-check"><input id="sales-payment-checked" type="checkbox"> I checked Stripe and the selected payment was received</label><button id="sales-confirm-payment" type="button">Confirm payment &amp; create customer</button><p id="sales-payment-status"></p>
    <h3>3. Book the 20-minute onboarding call</h3>
    <p>“Great, we just received it. We’ll send your receipt and contract, and we’ll need a quick 15–20 minute onboarding call to get access to your accounts and get the ads created and shipped. What time in the next two or three days works for you?”</p>
-   <form id="sales-onboarding-details">   <div class="pair"><label>Onboarding date<input name="date" type="date"></label><label>Time · their local time<input name="time" type="time" step="300"></label></div>
-   <div class="pair"><label>Time zone<select name="zone"><option>Eastern</option><option>Central</option><option>Mountain</option><option>Pacific (US)</option><option>Arizona</option><option>Vancouver</option></select></label><label>Host<select name="host_id"></select></label></div>
-<button type="submit">Save onboarding time</button></form>
+   <form id="sales-onboarding-details">
+    <input name="date" type="hidden"><input name="time" type="hidden"><input name="zone" type="hidden">
+    <p>Company time zone: <strong id="sales-company-zone"></strong></p>
+    <label for="sales-onboarding-day">Onboarding date · <strong id="sales-onboarding-date-label"></strong></label>
+    <input id="sales-onboarding-day" type="range" min="0" max="14" step="1" value="1">
+    <details><summary>Choose another date</summary><label>Exact date<input id="sales-onboarding-exact-date" type="date"></label></details>
+    <label for="sales-onboarding-time">Their local time · <strong id="sales-onboarding-time-label"></strong></label>
+    <div class="sales-time-slider"><button id="sales-time-earlier" type="button" aria-label="15 minutes earlier">−15 min</button><input id="sales-onboarding-time" type="range" min="360" max="1200" step="15" value="540"><button id="sales-time-later" type="button" aria-label="15 minutes later">+15 min</button></div>
+    <p id="sales-onboarding-time-preview" class="booking-hint" aria-live="polite"></p>
+    <label>Host<select name="host_id"></select></label>
+    <button type="submit">Save onboarding time</button></form>
    <button id="sales-book-onboarding" type="button">Create onboarding Zoom &amp; calendar event</button><p id="sales-onboarding-status"></p>
    <h3>4. Send one package email</h3><p>“We’ll send you your receipt, the contract to fill out and email back, and the date and time of our onboarding call, all in one email.”</p>
-   <div class="pair"><form id="sales-contract-upload"><label>Contract to sign · PDF<input name="file" type="file" accept="application/pdf" required></label><button type="submit">Attach contract</button></form><form id="sales-receipt-upload"><label>Actual Stripe payment receipt · PDF<input name="file" type="file" accept="application/pdf" required></label><button type="submit">Attach receipt</button></form></div><div id="sales-close-documents"></div>
+   <p>BMT Marketing Services Agreement · included automatically. Its fillable fields and electronic-signature fields are preserved.</p>
+   <form id="sales-receipt-upload"><label>Actual Stripe payment receipt · PDF<input name="file" type="file" accept="application/pdf" required></label><button type="submit">Add Stripe receipt after payment</button></form><div id="sales-close-documents"></div>
    <button id="sales-preview-package" type="button" class="primary">Preview receipt, contract &amp; onboarding email</button>
    <div id="sales-close-preview" class="sales-email" hidden><p id="sales-close-recipient"></p><h3 id="sales-close-subject"></h3><pre id="sales-close-body"></pre><p id="sales-close-attachments"></p><label class="sale-check"><input id="sales-email-retry" type="checkbox"> If retrying, I checked Sent mail and confirmed this email was not delivered</label><button id="sales-close-send" type="button" class="primary">Send email</button></div>
    <p>“Great, thanks for the business. We’ll talk to you in a couple of days.”</p>
@@ -210,5 +219,6 @@
 <script src="/crm-assets/onboarding.js?v=onboarding-audit-3"></script>
 <script src="/crm-assets/customers.js?v=sales-close-3"></script>
 <script src="/crm-assets/sales_call.js?v=facebook-brief-4"></script>
-<script src="/crm-assets/sales_close.js?v=1"></script>
+<script src="/crm-assets/sales_time.js?v=1"></script>
+<script src="/crm-assets/sales_close.js?v=scheduling-contract-2"></script>
 </body></html>

@@ -72,6 +72,20 @@ class CloseTests(unittest.TestCase):
  def test_booking_retry_reuses_zoom_and_uncertain_creation_stops(self):
   self.pay();provider=Provider();provider.fail=True;r=close.book(self.id,{'revision':close.read(self.id)['revision']},provider=provider);self.assertEqual(r['meeting']['state'],'failed')
   provider.fail=False;r=close.book(self.id,{'revision':close.read(self.id)['revision']},provider=provider);self.assertEqual(r['meeting']['state'],'complete');self.assertEqual(provider.zooms,1);self.assertEqual(provider.calendars,2)
+ def test_default_contract_is_included_and_prospect_timezone_wins(self):
+  r=self.setup_close()
+  with store.connect() as con:con.execute("UPDATE crm_leads SET lead_timezone='America/Los_Angeles',call_zone='Eastern' WHERE id=?",(self.id,))
+  self.assertEqual(close.read(self.id)['data']['zone'],'Pacific (US)')
+  r=close.save(self.id,{'revision':r['revision'],'data':{'zone':'Eastern'}})
+  self.assertEqual(r['data']['zone'],'Pacific (US)')
+  self.assertTrue(next(d for d in r['documents'] if d['kind']=='Contract')['default'])
+  self.assertEqual(close.document(self.id,'Contract')['body'],close.DEFAULT_CONTRACT.read_bytes())
+  with self.assertRaises(ValueError):self.upload('Receipt')
+  close.confirm_payment(self.id,{'revision':r['revision'],'payment_received':True});self.upload('Receipt')
+  close.book(self.id,{'revision':close.read(self.id)['revision']},provider=Provider())
+  p=close.preview(self.id,'package');self.assertEqual({d['kind'] for d in p['attachments']},{'Contract','Receipt'})
+  self.assertEqual(len(crm_customers.read(self.id)['documents']),2)
+
  def test_uncertain_zoom_is_not_created_twice(self):
   self.pay();p=Provider();p.uncertain=True;r=close.book(self.id,{'revision':close.read(self.id)['revision']},provider=p);self.assertEqual(r['meeting']['state'],'review')
   with self.assertRaises(ValueError):close.book(self.id,{'revision':close.read(self.id)['revision']},provider=p)

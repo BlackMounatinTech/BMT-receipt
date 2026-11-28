@@ -8,6 +8,7 @@ import crm_store as store
 from crm_customers import PAYMENT_LINKS
 
 SENDER='michael@blackmountaintechnologies.ca'
+DEFAULT_CONTRACT=Path(__file__).with_name('crm_documents')/'BMT_Marketing_Services_Agreement.pdf'
 FIELDS={'email','payment_plan','payment_reference','payment_confirmed','host_id','date','time','zone'}
 
 def schema(con):
@@ -29,14 +30,27 @@ def eligible(con,lid):
  if l['is_test'] or l['status'] not in ('Call booked','Won') or not l['call_start_utc']:raise ValueError('Choose a booked prospect or their customer record.')
  return dict(l)
 
+def prospect_zone(lead):
+ from crm_appointments import ZONES
+ aliases={'America/Boise':'America/Denver','America/Menominee':'America/Chicago'}
+ zone=aliases.get(lead.get('lead_timezone'),lead.get('lead_timezone'))
+ return next((label for label,iana in {**ZONES,'Vancouver':'Etc/GMT+7'}.items() if iana==zone),None) or (lead.get('call_zone') if lead.get('call_zone') in [*ZONES,'Vancouver'] else '')
+
+def documents(con,lid):
+ docs=[dict(x) for x in con.execute('SELECT * FROM crm_sales_documents WHERE lead_id=? ORDER BY kind',(lid,))]
+ if not any(d['kind']=='Contract' for d in docs) and DEFAULT_CONTRACT.is_file():
+  docs.append(dict(lead_id=lid,kind='Contract',filename=DEFAULT_CONTRACT.name,body=DEFAULT_CONTRACT.read_bytes(),updated_at='',default=True))
+ return sorted(docs,key=lambda d:d['kind'])
+
 def read(lid):
  from crm_booking import hosts
  with store.connect() as con:
   schema(con);l=eligible(con,lid);r=con.execute('SELECT * FROM crm_sales_close WHERE lead_id=?',(lid,)).fetchone()
-  data=json.loads(r['data']) if r else {};data.setdefault('email',l['email']);data.setdefault('zone',l['call_zone'] or 'Vancouver');data.setdefault('host_id','michael')
-  docs=[dict(x) for x in con.execute('SELECT kind,filename,updated_at FROM crm_sales_documents WHERE lead_id=?',(lid,))]
+  data=json.loads(r['data']) if r else {};data.setdefault('email',l['email']);data['zone']=prospect_zone(l);data.setdefault('host_id','michael')
+  docs=[{k:v for k,v in d.items() if k!='body'} for d in documents(con,lid)]
   job=con.execute('SELECT * FROM crm_sales_onboarding_jobs WHERE lead_id=?',(lid,)).fetchone()
   meeting=None
+  if job and job['state']=='complete':data['zone']=json.loads(job['payload'])['zone']
   if job:
    meeting={k:job[k] for k in ('state','zoom_url','event_url','error','busy')};meeting.update(json.loads(job['payload']))
   messages=[dict(x) for x in con.execute('SELECT kind,state,updated_at FROM crm_sales_messages WHERE lead_id=? ORDER BY updated_at',(lid,))]
@@ -55,7 +69,10 @@ def save(lid,p):
  # Payment confirmation is set only by the explicit confirmation endpoint.
  if 'payment_confirmed' in data:raise ValueError('Use Confirm payment after checking Stripe.')
  with store.connect() as con:
-  schema(con);con.execute('BEGIN IMMEDIATE');eligible(con,lid)
+  schema(con);con.execute('BEGIN IMMEDIATE');lead=eligible(con,lid)
+  known_zone=prospect_zone(lead)
+  booked=con.execute("SELECT payload FROM crm_sales_onboarding_jobs WHERE lead_id=? AND state='complete'",(lid,)).fetchone()
+  if known_zone or booked:data={**data,'zone':json.loads(booked['payload'])['zone'] if booked else known_zone}
   r=con.execute('SELECT * FROM crm_sales_close WHERE lead_id=?',(lid,)).fetchone();rev=r['revision'] if r else 0
   if rev!=p['revision']:raise store.Conflict('Close details changed elsewhere. Reload before saving.')
   old=json.loads(r['data']) if r else {}
@@ -66,7 +83,7 @@ def save(lid,p):
 
 def sync_documents(con,lid):
  if con.execute("SELECT status FROM crm_leads WHERE id=?",(lid,)).fetchone()[0]!='Won':return
- for doc in con.execute('SELECT * FROM crm_sales_documents WHERE lead_id=?',(lid,)).fetchall():
+ for doc in documents(con,lid):
   kind='Invoice' if doc['kind']=='Receipt' else 'Contract'
   if not con.execute('SELECT 1 FROM crm_customer_documents WHERE lead_id=? AND kind=? AND filename=? AND body=?',(lid,kind,doc['filename'],doc['body'])).fetchone():
    con.execute('INSERT INTO crm_customer_documents(lead_id,kind,filename,mime,body,created_at) VALUES(?,?,?,?,?,?)',(lid,kind,doc['filename'],'application/pdf',doc['body'],store.now()))
@@ -81,6 +98,8 @@ def upload(lid,kind,file):
   schema(con);eligible(con,lid)
   from crm_customers import schema as customer_schema
   customer_schema(con);con.execute('BEGIN IMMEDIATE')
+  paid=con.execute('SELECT data FROM crm_sales_close WHERE lead_id=?',(lid,)).fetchone()
+  if kind=='Receipt' and (not paid or not json.loads(paid['data']).get('payment_confirmed')):raise ValueError('Confirm the received payment before attaching its Stripe receipt.')
   if con.execute("SELECT 1 FROM crm_sales_messages WHERE lead_id=? AND state='sending'",(lid,)).fetchone():raise ValueError('Wait for the current email before replacing attachments.')
   con.execute('INSERT OR REPLACE INTO crm_sales_documents VALUES(?,?,?,?,?)',(lid,kind,name,body,store.now()))
   sync_documents(con,lid)
@@ -88,9 +107,11 @@ def upload(lid,kind,file):
 
 def document(lid,kind):
  with store.connect() as con:
-  schema(con);eligible(con,lid);r=con.execute('SELECT * FROM crm_sales_documents WHERE lead_id=? AND kind=?',(lid,kind)).fetchone()
-  if not r:raise LookupError('Document not found.')
-  return dict(r)
+  schema(con);eligible(con,lid)
+  doc=next((d for d in documents(con,lid) if d['kind']==kind),None)
+  if not doc:raise LookupError('Document not found.')
+  return doc
+
 
 def confirm_payment(lid,p):
  import crm_customers
@@ -132,7 +153,7 @@ def preview(lid,kind):
   if not d.get('payment_confirmed'):raise ValueError('Confirm the payment in Stripe first.')
   meeting=current['meeting']
   if not meeting or meeting['state']!='complete':raise ValueError('Book the onboarding call before sending the package.')
-  with store.connect() as con:docs=[dict(x) for x in con.execute('SELECT * FROM crm_sales_documents WHERE lead_id=? ORDER BY kind',(lid,))]
+  with store.connect() as con:docs=documents(con,lid)
   if {x['kind'] for x in docs}!={'Contract','Receipt'}:raise ValueError('Attach the contract and actual payment receipt as PDFs first.')
   when=datetime.fromisoformat(meeting['start']).astimezone(ZoneInfo(meeting['timezone']))
   stamp=when.strftime('%A, %B %-d, %Y at %-I:%M %p')+' ('+meeting['zone']+' time)'
