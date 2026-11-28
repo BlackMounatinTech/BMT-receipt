@@ -2,7 +2,7 @@
 TRADES=['Excavation','Landscaping','Carpentry','Concrete']
 COMMON=[
  ('goals','Where do you want the company to be over the next three to six months?'),
- ('ideal_jobs','What kinds of jobs do you want more of, and which ones would you rather avoid?'),
+ ('ideal_jobs','What types of projects do you want more of? What’s your bread and butter—the work that’s most profitable, easiest for your crew to fulfill, simplest overall, or just the work you prefer doing?'),
  ('project_value','What is a typical job worth, and what is the smallest project worth taking?'),
  ('capacity','How many additional jobs could your team realistically handle each month?'),
  ('service_area','Which cities or areas should we target, and how far will you travel?'),
