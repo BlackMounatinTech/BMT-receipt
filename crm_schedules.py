@@ -12,7 +12,7 @@ DESCRIPTIONS={
  'morning':'Open at 6 AM your time, and 1 or 2 hours ahead. Sorted by opening time.',
  'daytime':'Same time as you or behind, open during 7 AM–5 PM your time. Sorted by opening time.',
  'evening':'Open during 5–8 PM your time. Sorted by opening time.',
- 'saturday':'Published Saturday hours, converted to your time. Earliest opening first.',
+ 'saturday':'Published hours first, earliest opening in your time. Noon, midnight and overnight hours last.',
  'sunday':'Published Sunday hours, converted to your time. Earliest opening first.'}
 
 def kind_for(list_id):
@@ -70,6 +70,24 @@ def windows(lead,target):
         else:merged.append((a,b))
     return merged
 
+def saturday_hours_priority(lead,target):
+    """Deprioritize ambiguous source hours without changing the published facts."""
+    hours=json.loads(lead.get('business_hours') or '{}')
+    zone=ZoneInfo(lead.get('lead_timezone') or ZONES.get(lead.get('call_zone'),''))
+    suspect=False
+    for delta in (-1,0,1):
+        day=target+timedelta(days=delta)
+        for start,end in hours.get('weekly',{}).get(str(day.weekday()),[]):
+            local_start=datetime.combine(day,datetime.min.time(),zone)+timedelta(minutes=start)
+            local_end=datetime.combine(day,datetime.min.time(),zone)+timedelta(minutes=end+(1440 if end<start else 0))
+            # Judge original company-local hours, not a noon produced by conversion.
+            if local_start.astimezone(HOME).date()>target or local_end.astimezone(HOME)<=datetime.combine(target,datetime.min.time(),HOME):
+                continue
+            if start in (0,720) or end in (0,720,1440) or end<start:
+                suspect=True
+    sourced=all(hours.get(key) for key in ('source','source_url','checked_at'))
+    return (int(suspect),int(not sourced))
+
 def select(kind,rows,instant=None):
     if kind not in NAMES:raise ValueError('Choose a calling list.')
     today=(instant or datetime.now(timezone.utc)).astimezone(HOME).date()
@@ -95,7 +113,8 @@ def select(kind,rows,instant=None):
         row=dict(lead);row.update(outcome=lead.get('last_call_outcome'),called_at=lead.get('last_called_at'),
             opening_minute=min(p[0] for p in matches),closing_minute=max(p[1] for p in matches),schedule_date=target.isoformat())
         picked.append(row)
-    picked.sort(key=lambda r:(r['opening_minute'],r['company'].casefold(),r['id']))
+    picked.sort(key=lambda r:((saturday_hours_priority(r,target) if kind=='saturday' else ())+
+                             (r['opening_minute'],r['company'].casefold(),r['id'])))
     for i,row in enumerate(picked):row['position']=i
     return picked
 

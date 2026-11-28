@@ -38,6 +38,34 @@ class ScheduleTests(unittest.TestCase):
         self.assertEqual([r['opening_minute'] for r in sat],[0,360,420])
         self.assertEqual([r['id'] for r in schedule.select('sunday',rows,NOW)],[2])
 
+    def test_saturday_prioritizes_sourced_normal_hours_before_noon_midnight_and_overnight(self):
+        rows=[lead(1,'Arizona',{'5':[[0,1440]]}),
+              lead(2,'Arizona',{'5':[[420,1020]]}),
+              lead(3,'Arizona',{'5':[[360,1080]]}),
+              lead(4,'Arizona',{'5':[[720,1080]]}),
+              lead(5,'Arizona',{'5':[[360,720]]}),
+              lead(6,'Arizona',{'5':[[480,300]]}),
+              lead(7,'Arizona',{'5':[[300,1020]]})]
+        for row in rows[:-1]:
+            hours=json.loads(row['business_hours'])
+            hours.update(source='Company website',source_url='https://example.com/hours',checked_at='2026-11-28')
+            row['business_hours']=json.dumps(hours)
+        result=schedule.select('saturday',rows,NOW)
+        self.assertEqual([r['id'] for r in result],[3,2,7,1,5,6,4])
+        self.assertEqual([r['position'] for r in result],list(range(7)))
+        self.assertEqual(len(result),len(rows))
+
+    def test_saturday_checks_company_local_hours_not_converted_noon(self):
+        # Eastern 2 PM closes at noon at home: still an ordinary published closing.
+        normal=lead(1,'Eastern',{'5':[[480,840]]})
+        # Eastern noon closes at 10 AM at home: still gets the requested lower priority.
+        noon=lead(2,'Eastern',{'5':[[360,720]]})
+        self.assertEqual([r['id'] for r in schedule.select('saturday',[noon,normal],NOW)],[1,2])
+        # The requested sorting change applies only to Saturday.
+        normal['business_hours']=json.dumps({'weekly':{'6':[[480,840]]}})
+        noon['business_hours']=json.dumps({'weekly':{'6':[[360,720]]}})
+        self.assertEqual([r['id'] for r in schedule.select('sunday',[normal,noon],NOW)],[2,1])
+
     def test_24_hour_periods_merge_across_company_local_midnight(self):
         row=lead(1,'Pacific (US)',{str(i):[[0,1440]] for i in range(7)})
         result=schedule.select('daytime',[row],NOW)[0]
