@@ -256,6 +256,44 @@ const dayDate = day => new Date(day + 'T12:00:00Z');
 const vanDate = iso => new Intl.DateTimeFormat('en-CA',{timeZone:'Etc/GMT+7',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(iso));
 const vanTime = iso => new Intl.DateTimeFormat('en-US',{timeZone:'Etc/GMT+7',hour:'numeric',minute:'2-digit'}).format(new Date(iso));
 function appointments() { return leads.filter(l=>!l.is_test && l.status==='Call booked' && l.call_start_utc).sort((a,b)=>a.call_start_utc.localeCompare(b.call_start_utc)); }
+let renderedAgendaDay='';
+function renderDaySchedule(dayCalls){
+  const agenda=$('#agenda'),previousScroll=renderedAgendaDay===calendarDay?agenda.scrollTop:0;
+  agenda.replaceChildren();renderedAgendaDay=calendarDay;
+  $('#agenda-summary').textContent=`${dayCalls.length} ${dayCalls.length===1?'meeting':'meetings'} · your time · hourly lines from 6 AM to 8 PM`;
+  const grid=el('div','day-timeline-grid'),track=el('div','day-meeting-track'),inside=[],outside=[];
+  for(const lead of dayCalls){
+    const parts=Object.fromEntries(new Intl.DateTimeFormat('en-US',{timeZone:'Etc/GMT+7',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date(lead.call_start_utc)).map(p=>[p.type,p.value]));
+    const start=Number(parts.hour)*60+Number(parts.minute);
+    (start>=360&&start<1260?inside:outside).push({lead,start,end:start+30});
+  }
+  const height=(Math.max(1260,...inside.map(item=>item.end))-360)/60*84;
+  grid.style.height=height+32+'px';track.style.height=height+'px';
+  for(let hour=6;hour<=20;hour++){
+    const line=el('div','day-hour-line');line.style.top=(hour-6)*84+16+'px';
+    line.append(el('span','',`${hour%12||12} ${hour>=12?'PM':'AM'}`));grid.append(line);
+  }
+  // Meetings that overlap share columns; consecutive half-hour meetings use full width.
+  let group=[],until=-1;
+  function placeGroup(){
+    const ends=[];
+    for(const item of group){let column=ends.findIndex(end=>end<=item.start);if(column<0)column=ends.length;ends[column]=item.end;item.column=column;}
+    for(const item of group){
+      const {lead,start}=item,row=el('button','day-meeting');row.type='button';
+      const label=`${vanTime(lead.call_start_utc)}–${vanTime(new Date(new Date(lead.call_start_utc).getTime()+1800000).toISOString())}`;
+      row.style.top=(start-360)/60*84+2+'px';row.style.height='40px';
+      row.style.left=`calc(${item.column*100/ends.length}% + 3px)`;row.style.width=`calc(${100/ends.length}% - 6px)`;
+      row.setAttribute('aria-label',lead.company+', '+label+', your time');row.title=lead.company+' · '+label;
+      row.append(el('strong','',lead.company),el('span','',label));row.onclick=()=>openLead(lead);track.append(row);
+    }
+    group=[];
+  }
+  for(const item of inside){if(item.start>=until&&group.length)placeGroup();group.push(item);until=Math.max(item.end,group.length===1?-1:until);}
+  if(group.length)placeGroup();grid.append(track);agenda.append(grid);agenda.scrollTop=previousScroll;
+  const extra=$('#agenda-other');extra.replaceChildren();extra.hidden=!outside.length;
+  if(outside.length)extra.append(el('h3','','Other meeting times'));
+  for(const {lead} of outside){const row=el('button','lead-row');row.type='button';row.append(el('span','company',lead.company),el('span','sub',vanTime(lead.call_start_utc)+' · 30 minutes'));row.onclick=()=>openLead(lead);extra.append(row);}
+}
 function renderCalendar() {
   const first = dayDate(calendarMonth+'-01'), year=first.getUTCFullYear(), month=first.getUTCMonth();
   $('#calendar-month').textContent = first.toLocaleDateString('en-US',{timeZone:'UTC',month:'long',year:'numeric'});
@@ -271,14 +309,8 @@ function renderCalendar() {
     button.onclick=()=>{calendarDay=key;calendarMonth=key.slice(0,7);renderCalendar()};grid.append(button);
   }
   $('#agenda-title').textContent=dayDate(calendarDay).toLocaleDateString('en-US',{timeZone:'UTC',weekday:'long',month:'long',day:'numeric'});
-  const agenda=$('#agenda');agenda.replaceChildren();
   const dayCalls=calls.filter(l=>vanDate(l.call_start_utc)===calendarDay);
-  if(!dayCalls.length)agenda.append(el('p','booking-hint','No appointments on this day. Open a lead to book one.'));
-  for(const lead of dayCalls) {
-    const row=el('button','lead-row');row.type='button';
-    const info=el('div','lead-main');info.append(el('div','company',lead.company),el('div','sub',`${vanTime(lead.call_start_utc)} Vancouver · ${lead.call_time} ${lead.call_zone} · 30 min`));
-    row.append(info,el('span','badge',lead.confirmed_at?'Confirmed':lead.confirmation_sent_at?'Awaiting reply':'Email not sent'));row.onclick=()=>openLead(lead);agenda.append(row);
-  }
+  renderDaySchedule(dayCalls);
 }
 function showPage(page) {
   if (['calling','called','booked','booking'].includes(location.hash.slice(1))) return;
