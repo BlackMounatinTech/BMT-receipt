@@ -69,7 +69,7 @@
       document.querySelectorAll('.main-nav button').forEach(b => b.classList.toggle('active',b.id===(name==='called'?'nav-called':name==='booked'?'nav-booked':'nav-calling')));
     }
   }
-  async function refreshLists() {
+  async function refreshLists({restart=false}={}) {
     const [data, pending] = await Promise.all([api('/api/calling/lists'),api('/api/booking/jobs')]);
     jobs = pending.jobs;
     const select = $('#call-list'); select.replaceChildren(new Option('Choose a list',''));
@@ -79,7 +79,7 @@
     select.value = listId;
     $('#call-list-description').textContent=visibleLists.find(l=>l.id===listId)?.description||'';
     if (listId) {
-      const oldId = current()?.id || Number(localStorage.getItem('bmt-call-position:'+listId));
+      const oldId = restart ? null : current()?.id || Number(localStorage.getItem('bmt-call-position:'+listId));
       queue = (await api('/api/calling/lists/'+listId)).leads;
       const found = queue.findIndex(l => l.id===oldId);
       position = found >= 0 ? found : Math.max(0,queue.findIndex(l => !l.outcome && !['Won','Lost','Call booked'].includes(l.status)));
@@ -163,7 +163,7 @@
     listId=$('#call-list').value;queue=[];position=0;
     try {await refreshLists();} catch(e){error('call-error',e.message);}
   };
-  $('#refresh-calls').onclick=async()=>{if(!callBusy && await canLeave())try{await refreshLists();}catch(e){error('call-error',e.message);}};
+  $('#refresh-calls').onclick=async()=>{if(!callBusy && await canLeave())try{await refreshLists({restart:true});}catch(e){error('call-error',e.message);}};
   $('#call-details').onclick=()=>openLead(leads.find(l=>l.id===current().id)||current());
   async function record(outcome) {
     if(callBusy || !current())return;
