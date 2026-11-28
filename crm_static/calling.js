@@ -73,14 +73,11 @@
     const [data, pending] = await Promise.all([api('/api/calling/lists'),api('/api/booking/jobs')]);
     jobs = pending.jobs;
     const select = $('#call-list'); select.replaceChildren(new Option('Choose a list',''));
-    for(const [label,scheduled] of [['Calling times',true],['Original imported sheets',false]]){
-      const group=document.createElement('optgroup');group.label=label;
-      data.lists.filter(l=>!!l.scheduled===scheduled).forEach(l=>group.append(new Option(`${scheduled?'':'Original sheet: '}${l.name} · ${l.completed}/${l.total}`,l.id)));
-      select.append(group);
-    }
-    if (!data.lists.some(l => l.id===listId)) listId = data.lists[0]?.id || '';
+    const visibleLists=data.lists.filter(l=>l.scheduled);
+    visibleLists.forEach(l=>select.append(new Option(`${l.name} · ${l.completed}/${l.total}`,l.id)));
+    if (!visibleLists.some(l => l.id===listId)) listId = visibleLists[0]?.id || '';
     select.value = listId;
-    $('#call-list-description').textContent=data.lists.find(l=>l.id===listId)?.description||'Original imported sheet. Use a calling-time list above to filter by verified opening hours.';
+    $('#call-list-description').textContent=visibleLists.find(l=>l.id===listId)?.description||'';
     if (listId) {
       const oldId = current()?.id || Number(localStorage.getItem('bmt-call-position:'+listId));
       queue = (await api('/api/calling/lists/'+listId)).leads;
