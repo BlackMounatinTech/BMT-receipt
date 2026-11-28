@@ -27,8 +27,11 @@ def source_list(con,list_id,lead_id):
 
 def history(con,rows):
     latest={}
-    for event in con.execute('SELECT lead_id,outcome,created_at FROM crm_call_events ORDER BY created_at,id'):
+    for event in con.execute('SELECT lead_id,outcome,called_at AS created_at FROM crm_call_items WHERE called_at IS NOT NULL ORDER BY called_at'):
         latest[event['lead_id']]=dict(event)
+    for event in con.execute('SELECT lead_id,outcome,created_at FROM crm_call_events ORDER BY created_at,id'):
+        if event['created_at'] >= latest.get(event['lead_id'],{}).get('created_at',''):
+            latest[event['lead_id']]=dict(event)
     for row in rows:
         event=latest.get(row['id'])
         row['last_called_at']=event['created_at'] if event else None
@@ -77,6 +80,8 @@ def select(kind,rows,instant=None):
         target=today+timedelta(days=(7-today.weekday())%7 if today.weekday()>4 else 0)
     picked=[]
     for lead in rows:
+        if lead.get('last_called_at') or lead.get('is_test'):
+            continue
         periods=windows(lead,target)
         try:
             z=ZoneInfo(lead.get('lead_timezone') or ZONES.get(lead.get('call_zone'),''))

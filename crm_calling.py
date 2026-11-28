@@ -212,6 +212,23 @@ def items(list_id):
         return crm_schedules.history(con,rows)
 
 
+def called():
+    """One row per called company, retaining notes and its latest call outcome."""
+    import crm_schedules
+    call_counts()  # Recover any legacy call notes before reading the history.
+    with store.connect() as con:
+        schema(con)
+        rows=[dict(r) for r in con.execute('''SELECT l.*,
+            COALESCE(n.text,(SELECT SUBSTR(text,INSTR(text,CHAR(10))+1) FROM crm_notes
+                WHERE lead_id=l.id AND text LIKE 'Phone: %' AND INSTR(text,CHAR(10))>0 ORDER BY id DESC LIMIT 1),'') AS call_notes,
+            COALESCE(n.version,0) AS note_version
+            FROM crm_leads l LEFT JOIN crm_call_notes n ON n.lead_id=l.id
+            WHERE l.is_test=0 AND (EXISTS(SELECT 1 FROM crm_call_events e WHERE e.lead_id=l.id)
+                OR EXISTS(SELECT 1 FROM crm_call_items i WHERE i.lead_id=l.id AND i.called_at IS NOT NULL))''')]
+        rows=crm_schedules.history(con,rows)
+    return sorted(rows,key=lambda r:(r['last_called_at'],r['id']),reverse=True)
+
+
 def save_notes(lead_id, text, version):
     if not isinstance(text,str) or len(text)>10000 or type(version) is not int:
         raise ValueError('Check the call notes and refresh if needed.')

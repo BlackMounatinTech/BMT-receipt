@@ -58,10 +58,11 @@ class ScheduleTests(unittest.TestCase):
             calling.save_notes(row['id'],'Try owner tomorrow',0)
             calling.outcome('schedule:daytime',row['id'],row['revision'],'Follow up','Try owner tomorrow')
             for name in ('daytime','evening','saturday','sunday'):
-                item=calling.items('schedule:'+name)[0]
-                self.assertEqual(item['last_call_outcome'],'Follow up')
-                self.assertTrue(item['last_called_at'])
-                self.assertEqual(item['call_notes'],'Try owner tomorrow')
+                self.assertEqual(calling.items('schedule:'+name),[])
+            item=calling.called()[0]
+            self.assertEqual(item['last_call_outcome'],'Follow up')
+            self.assertTrue(item['last_called_at'])
+            self.assertEqual(item['call_notes'],'Try owner tomorrow')
             self.assertEqual(calling.call_counts()['total'],1)
             with self.assertRaises(store.Conflict):calling.outcome('schedule:evening',row['id'],row['revision'],'No answer')
             self.assertEqual(calling.call_counts()['total'],1)
@@ -83,5 +84,36 @@ class ScheduleTests(unittest.TestCase):
                 payload=json.loads(con.execute('SELECT payload FROM crm_booking_jobs WHERE id=?',(job,)).fetchone()[0])
             self.assertEqual(payload['list_id'],result['list_id'])
             self.assertEqual(calling.items(result['list_id'])[0]['last_call_outcome'],'Book meeting')
+
+    def test_called_tab_deduplicates_company_and_keeps_source_sheets_and_notes(self):
+        with tempfile.TemporaryDirectory() as tmp,patch.dict(os.environ,{'BMT_DATA_DIR':tmp}):
+            seed=dict(company='Builder',phone='2065550100',location='Seattle, WA',email='',contact='',need='',website='',call_zone='Pacific (US)')
+            first=calling.import_list('Original',[seed],True)
+            second=calling.import_list('Another sheet',[seed],True)
+            row=calling.items(first['list_id'])[0]
+            with store.connect() as con:
+                con.execute('UPDATE crm_leads SET business_hours=? WHERE id=?',(json.dumps({'weekly':{str(i):[[0,1440]] for i in range(7)}}),row['id']))
+            calling.save_notes(row['id'],'Owner asked for an email',0)
+            calling.outcome('schedule:daytime',row['id'],row['revision'],'No answer','Owner asked for an email')
+            for name in schedule.NAMES:
+                self.assertFalse(any(r['id']==row['id'] for r in calling.items('schedule:'+name)))
+            response=crm_web.app.test_client().get('/api/calling/called')
+            self.assertEqual(response.status_code,200)
+            called=response.json['leads']
+            self.assertEqual(len(called),1)
+            self.assertEqual(called[0]['call_notes'],'Owner asked for an email')
+            self.assertEqual(called[0]['last_call_outcome'],'No answer')
+            for source in (first,second):
+                self.assertEqual(len(calling.items(source['list_id'])),1)
+            self.assertEqual(calling.call_counts()['total'],1)
+
+    def test_called_tab_recovers_legacy_items_without_a_call_event(self):
+        with tempfile.TemporaryDirectory() as tmp,patch.dict(os.environ,{'BMT_DATA_DIR':tmp}):
+            result=calling.import_list('Legacy',[dict(company='Legacy builder',phone='2065550100',location='',email='',contact='',need='',website='',call_zone='Pacific (US)')],True)
+            with store.connect() as con:
+                con.execute("UPDATE crm_call_items SET outcome='Not interested',called_at='2026-11-27T20:00:00+00:00' WHERE list_id=?",(result['list_id'],))
+            row=calling.called()[0]
+            self.assertEqual(row['last_call_outcome'],'Not interested')
+            self.assertEqual(row['last_called_at'],'2026-11-27T20:00:00+00:00')
 
 if __name__=='__main__':unittest.main()

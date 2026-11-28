@@ -281,7 +281,8 @@ function renderCalendar() {
   }
 }
 function showPage(page) {
-  if (['calling','booking'].includes(location.hash.slice(1))) return;
+  if (['calling','called','booking'].includes(location.hash.slice(1))) return;
+  $('#called-page').hidden=true;
   pipeline=page; view='open';
   $('#leads-page').hidden=['calendar','stats','system','sales-call','onboarding'].includes(page);$('#calendar-page').hidden=page!=='calendar';$('#stats-page').hidden=page!=='stats';$('#system-page').hidden=page!=='system';$('#sales-call-page').hidden=page!=='sales-call';$('#onboarding-page').hidden=page!=='onboarding';
   for (const [id,name] of [['nav-outreach','outreach'],['nav-leads','prospects'],['nav-customers','customers'],['nav-calendar','calendar'],['nav-followups','followups'],['nav-stats','stats'],['nav-system','system'],['nav-sales-call','sales-call'],['nav-onboarding','onboarding']]) $('#'+id).classList.toggle('active',page===name);

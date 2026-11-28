@@ -4,7 +4,7 @@
   let callBusy = false, importReady = false, connections = null, jobs = [], currentJob = null, bookingLead = null;
   const current = () => queue[position];
   const error = (id, message) => { $('#'+id).textContent = message || ''; $('#'+id).hidden = !message; };
-  const pages = ['calling','booking','leads','calendar','stats','system','sales-call','onboarding'];
+  const pages = ['calling','called','booking','leads','calendar','stats','system','sales-call','onboarding'];
   let noteTimer=null, noteWrites=Promise.resolve(), displayedLeadId=null;
   const noteKey=id=>'bmt-call-notes:'+id;
   function localDraft(id){try{return JSON.parse(localStorage.getItem(noteKey(id))||'null');}catch{return null;}}
@@ -65,8 +65,8 @@
   };
   function page(name) {
     pages.forEach(p => $('#'+p+'-page').hidden = p !== name);
-    if (['calling','booking'].includes(name)) {
-      document.querySelectorAll('.main-nav button').forEach(b => b.classList.toggle('active',b.id==='nav-calling'));
+    if (['calling','called','booking'].includes(name)) {
+      document.querySelectorAll('.main-nav button').forEach(b => b.classList.toggle('active',b.id===(name==='called'?'nav-called':'nav-calling')));
     }
   }
   async function refreshLists() {
@@ -74,7 +74,7 @@
     jobs = pending.jobs;
     const select = $('#call-list'); select.replaceChildren(new Option('Choose a list',''));
     const visibleLists=data.lists.filter(l=>l.scheduled);
-    visibleLists.forEach(l=>select.append(new Option(`${l.name} · ${l.completed}/${l.total}`,l.id)));
+    visibleLists.forEach(l=>select.append(new Option(`${l.name} · ${l.total} to call`,l.id)));
     if (!visibleLists.some(l => l.id===listId)) listId = visibleLists[0]?.id || '';
     select.value = listId;
     $('#call-list-description').textContent=visibleLists.find(l=>l.id===listId)?.description||'';
@@ -115,8 +115,12 @@
   function renderCard() {
     const lead = current(); $('#call-card').hidden = !lead; $('#call-empty').hidden = !!lead;
     $('#call-previous').disabled = !lead || position===0; $('#call-next').disabled = !lead || position>=queue.length-1;
-    $('#call-progress').textContent = lead ? `${position+1} of ${queue.length} · ${queue.filter(l=>l.outcome).length} completed` : '';
-    if (!lead) return;
+    $('#call-progress').textContent = lead ? `${position+1} of ${queue.length} remaining` : '';
+    if (!lead) {
+      $('#call-empty h2').textContent=listId?'No uncalled leads in this list.':'Choose a calling list.';
+      $('#call-empty p').textContent=listId?'Already-called companies are in Called. Choose another list or refresh.':'Choose Morning, Daytime, Evening, Saturday or Sunday.';
+      return;
+    }
     localStorage.setItem('bmt-call-position:'+listId,String(lead.id));
     $('#call-company').textContent = lead.company;
     $('#call-location').textContent = lead.location || 'Location not recorded';
@@ -168,7 +172,7 @@
     try {
       await flushNotes();
       await api(`/api/calling/lists/${listId}/${lead.id}/outcome`,{method:'POST',body:JSON.stringify({revision:lead.revision,outcome,note:$('#call-note').value,follow_up:$('#call-followup').value})});
-      $('#call-note').value=''; await load(); await refreshLists(); next();
+      $('#call-note').value=''; await load(); await refreshLists();
     } catch(e){error('call-error',e.message);}
     finally{callBusy=false;$('#call-note').disabled=false; if(current()?.id===lead.id){const note=$('#call-note').value,msg=$('#call-error').textContent;renderCard();$('#call-note').value=note;error('call-error',msg);}}
   }
@@ -183,14 +187,44 @@
   };
   $('#save-call-followup').onclick=()=>record('Follow up');
   $('#nav-calling').onclick=()=>{if(location.hash==='#calling')route();else location.hash='calling';};
+  $('#nav-called').onclick=()=>{if(location.hash==='#called')route();else location.hash='called';};
+  let calledRows=[];
+  const calledOutcome=row=>row.last_call_outcome==='Booked'?'Book meeting':row.last_call_outcome;
+  function renderCalled(){
+    const query=$('#called-search').value.trim().toLowerCase(),outcome=$('#called-outcome').value;
+    const shown=calledRows.filter(row=>(!outcome||calledOutcome(row)===outcome)&&(!query||[row.company,row.phone,row.contact,row.call_notes].join(' ').toLowerCase().includes(query)));
+    $('#called-count').textContent=`${shown.length} of ${calledRows.length} previously called companies`;
+    const root=$('#called-list');root.replaceChildren();
+    if(!shown.length)root.append(el('p','empty',calledRows.length?'No companies match these filters.':'No called companies yet.'));
+    for(const lead of shown){
+      const card=el('section','called-card'),heading=el('div','called-card-heading');
+      const info=el('div','');info.append(el('h2','',lead.company),el('p','booking-hint',[lead.contact,lead.location].filter(Boolean).join(' · ')));
+      heading.append(info,el('span','badge',calledOutcome(lead)));card.append(heading);
+      card.append(el('p','called-stamp','Last called: '+new Intl.DateTimeFormat('en-US',{timeZone:'Etc/GMT+7',dateStyle:'medium',timeStyle:'short'}).format(new Date(lead.last_called_at))+' · your time'));
+      if(lead.phone){const phone=el('a','',lead.phone);phone.href='tel:'+lead.phone.replace(/[^+\d]/g,'');card.append(phone);}
+      if(lead.call_notes)card.append(el('p','called-notes',lead.call_notes));
+      const actions=el('div','called-actions'),details=el('button','','View lead & history');details.type='button';details.onclick=()=>openLead(leads.find(l=>l.id===lead.id)||lead);actions.append(details);
+      const job=jobFor(lead);
+      if(job){const booking=el('button','','View booking');booking.type='button';booking.onclick=()=>{bookingLead=lead;$('#booking-company').textContent=lead.company;showResult(job);location.hash='booking';page('booking');};actions.append(booking);}
+      card.append(actions);root.append(card);
+    }
+  }
+  async function refreshCalled(){
+    $('#refresh-called').disabled=true;error('called-error','');
+    try{const [data,pending]=await Promise.all([api('/api/calling/called'),api('/api/booking/jobs')]);calledRows=data.leads;jobs=pending.jobs;renderCalled();await refreshCounts();}
+    catch(e){error('called-error',e.message);}
+    finally{$('#refresh-called').disabled=false;}
+  }
+  $('#refresh-called').onclick=refreshCalled;$('#called-search').oninput=renderCalled;$('#called-outcome').onchange=renderCalled;
   async function route() {
     const target=location.hash.slice(1);
     if(!await canLeave()){page('calling');return;}
     if(target==='calling') {
       page('calling');try{await refreshLists();}catch(e){error('call-error',e.message);}
-    } else if(target==='booking' && bookingLead) page('booking');
+    } else if(target==='called'){page('called');await refreshCalled();}
+    else if(target==='booking' && bookingLead) page('booking');
     else if(target==='booking'){location.hash='calling';}
-    else {$('#calling-page').hidden=true;$('#booking-page').hidden=true;$('#nav-calling').classList.remove('active');showPage(['outreach','customers','calendar','followups','stats','system','sales-call','onboarding'].includes(target)?target:'prospects');}
+    else {$('#calling-page').hidden=true;$('#called-page').hidden=true;$('#booking-page').hidden=true;$('#nav-calling').classList.remove('active');$('#nav-called').classList.remove('active');showPage(['outreach','customers','calendar','followups','stats','system','sales-call','onboarding'].includes(target)?target:'prospects');}
   }
   window.addEventListener('hashchange',route);
 
@@ -326,7 +360,7 @@
     finally{callBusy=false;$('#booking-retry').disabled=false;}
   };
   $('#booking-back').onclick=()=>{if(callBusy)return;if(!bookingForm.hidden && !confirm('Leave this booking without sending?'))return;location.hash='calling';};
-  $('#booking-next').onclick=()=>{if(callBusy)return;if(currentJob?.state==='complete')next();location.hash='calling';};
+  $('#booking-next').onclick=()=>{if(callBusy)return;if(currentJob?.state==='complete'&&current()?.id===bookingLead?.id)next();location.hash='calling';};
   $('#booking-abandon').onclick=async()=>{
     if(callBusy)return;callBusy=true;
     try{await api(`/api/booking/jobs/${currentJob.id}/abandon`,{method:'POST',body:'{}'});await refreshLists();location.hash='calling';}

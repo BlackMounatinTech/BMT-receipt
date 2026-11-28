@@ -289,6 +289,12 @@ def import_call_sheet():
         return jsonify(error='Could not read that file. Export the lead tab as CSV and try again.'),400
 
 
+@app.get('/api/calling/called')
+def called_leads():
+    import crm_calling
+    return jsonify(leads=crm_calling.called())
+
+
 @app.post('/api/calling/lists/<list_id>/<int:lead_id>/outcome')
 def record_call(list_id,lead_id):
     import crm_calling
