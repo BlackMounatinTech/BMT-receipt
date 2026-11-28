@@ -21,6 +21,7 @@
  }
  async function choose(id){
   draft();const current=++ticket;record=null;selected=String(id||'');workspace.hidden=true;$('#sales-close-empty').hidden=!!id;preview=null;$('#sales-close-preview').hidden=true;error('');
+  $('#sales-payment-checked').checked=false;$('#sales-contract-upload').reset();$('#sales-receipt-upload').reset();
   if(!id)return;
   try{const data=await api('/api/leads/'+id+'/sales-close');if(current!==ticket)return;apply(data);workspace.hidden=false;
    try{const saved=JSON.parse(localStorage.getItem(key(id))||'null');if(saved&&saved.revision===data.revision){for(const k of fields)input(k).value=saved.data[k]||'';}}catch(_){}

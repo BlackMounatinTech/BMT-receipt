@@ -1,6 +1,6 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const nodes={},storage=new Map(),handlers={};
-class Element{constructor(){this.value='';this.children=[];this.hidden=false;this.checked=false;}replaceChildren(...x){this.children=x;}append(...x){this.children.push(...x);}add(x){this.children.push(x);}reportValidity(){return true;}}
+class Element{constructor(){this.value='';this.children=[];this.hidden=false;this.checked=false;}replaceChildren(...x){this.children=x;}append(...x){this.children.push(...x);}add(x){this.children.push(x);}reportValidity(){return true;}reset(){this.value='';}}
 class Option{constructor(text,value){this.text=text;this.value=String(value);}}
 const $=q=>nodes[q]||(nodes[q]=new Element()),inputs={};for(const k of ['email','payment_plan','payment_reference','date','time','zone','host_id'])inputs[k]=new Element();
 $('#sales-close-details').elements={namedItem:k=>['email','payment_plan','payment_reference'].includes(k)?inputs[k]:null};$('#sales-onboarding-details').elements={namedItem:k=>['date','time','zone','host_id'].includes(k)?inputs[k]:null};
@@ -19,7 +19,7 @@ const context={Option,Intl,Date,FormData:class{},document:{querySelector:$,creat
  }};
 vm.runInNewContext(fs.readFileSync('crm_static/sales_close.js','utf8'),context);
 (async()=>{
- await handlers['crm-sales-prospect-selected']({detail:{id:1}});assert.equal(inputs.email.value,'pat@example.com');assert.equal($('#sales-close-workspace').hidden,false);
+ $('#sales-payment-checked').checked=true;await handlers['crm-sales-prospect-selected']({detail:{id:1}});assert.equal($('#sales-payment-checked').checked,false);assert.equal(inputs.email.value,'pat@example.com');assert.equal($('#sales-close-workspace').hidden,false);
  await $('#sales-preview-payment').onclick();assert.equal(sent,0);assert.equal($('#sales-close-preview').hidden,false);assert.match($('#sales-close-recipient').textContent,/pat@example.com/);
  await $('#sales-close-send').onclick();assert.equal(sent,1);
  await $('#sales-confirm-payment').onclick();assert.equal(paid,0);assert.match($('#sales-close-error').textContent,/Check Stripe/);
