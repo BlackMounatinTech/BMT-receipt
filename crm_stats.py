@@ -106,16 +106,16 @@ def report(start, end):
     with store.connect() as con:
         schema(con)
         # Preserve original booking dates, even after status changes or rescheduling.
-        for row in con.execute('SELECT id,booked_at FROM crm_leads WHERE booked_at IS NOT NULL'):
+        for row in con.execute('SELECT id,booked_at FROM crm_leads WHERE booked_at IS NOT NULL AND is_test=0'):
             record_booking(con,row['id'],row['booked_at'])
-        for row in con.execute('SELECT outcome,created_at FROM crm_call_events'):
+        for row in con.execute('SELECT e.outcome,e.created_at FROM crm_call_events e JOIN crm_leads l ON l.id=e.lead_id WHERE l.is_test=0'):
             d=days.get(local_day(row['created_at']))
             if d is None: continue
             d['calls']+=1
             key={'No answer':'no_answer','Not interested':'not_interested','Follow up':'follow_up','Book meeting':'booking_outcomes'}.get(row['outcome'],'unknown')
             d[key]+=1
             if key not in ('no_answer','unknown'): d['answered']+=1
-        for row in con.execute('SELECT created_at FROM crm_stats_bookings'):
+        for row in con.execute('SELECT b.created_at FROM crm_stats_bookings b JOIN crm_leads l ON l.id=b.lead_id WHERE l.is_test=0'):
             d=days.get(local_day(row['created_at']))
             if d is not None: d['meetings_booked']+=1
         outreach=[dict(r) for r in con.execute('SELECT * FROM crm_stats_outreach WHERE day>=? AND day<=? ORDER BY day DESC,channel',(start,end))]
@@ -142,7 +142,7 @@ def report(start, end):
                 d=local_day(r['observed_at'])
                 if d and start<=d<=end:
                     key=(d,r['channel']);entry=automatic.setdefault(key,dict(day=d,channel=key[1],sent=0,replies=0,interested=0,booked=0));entry['replies']+=1;entry['interested']+=r['interested']
-            for r in con.execute("SELECT p.channel,b.created_at FROM crm_ai_prospects p JOIN crm_stats_bookings b ON b.lead_id=p.lead_id WHERE p.sent_at IS NOT NULL AND b.created_at>=p.sent_at"):
+            for r in con.execute("SELECT p.channel,b.created_at FROM crm_ai_prospects p JOIN crm_stats_bookings b ON b.lead_id=p.lead_id JOIN crm_leads l ON l.id=b.lead_id WHERE l.is_test=0 AND p.sent_at IS NOT NULL AND b.created_at>=p.sent_at"):
                 d=local_day(r['created_at'])
                 if d and start<=d<=end:
                     key=(d,r['channel']);automatic.setdefault(key,dict(day=d,channel=key[1],sent=0,replies=0,interested=0,booked=0))['booked']+=1

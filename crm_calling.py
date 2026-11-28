@@ -51,8 +51,8 @@ def call_counts(reset=False, instant=None):
             maximum=con.execute('SELECT COALESCE(MAX(id),0) FROM crm_call_events').fetchone()[0]
             con.execute('INSERT OR REPLACE INTO crm_call_day_reset VALUES(?,?,?)',(day,maximum,store.now()))
         marker=con.execute('SELECT after_event_id FROM crm_call_day_reset WHERE day=?',(day,)).fetchone()
-        total=con.execute('SELECT COUNT(*) FROM crm_call_events').fetchone()[0]
-        daily=con.execute('SELECT COUNT(*) FROM crm_call_events WHERE created_at>=? AND created_at<? AND id>?',
+        total=con.execute('SELECT COUNT(*) FROM crm_call_events e JOIN crm_leads l ON l.id=e.lead_id WHERE l.is_test=0').fetchone()[0]
+        daily=con.execute('SELECT COUNT(*) FROM crm_call_events e JOIN crm_leads l ON l.id=e.lead_id WHERE l.is_test=0 AND e.created_at>=? AND e.created_at<? AND e.id>?',
                           (start,end,marker[0] if marker else 0)).fetchone()[0]
     return dict(total=total,today=daily,day=day)
 
@@ -63,7 +63,7 @@ def pipeline_counts():
         row = con.execute("""SELECT
             SUM(CASE WHEN status='Call booked' OR (status='Won' AND booked_at IS NOT NULL) THEN 1 ELSE 0 END) AS booked,
             SUM(CASE WHEN status='Won' THEN 1 ELSE 0 END) AS closes
-            FROM crm_leads""").fetchone()
+            FROM crm_leads WHERE is_test=0""").fetchone()
     return dict(booked=row['booked'] or 0, closes=row['closes'] or 0)
 
 

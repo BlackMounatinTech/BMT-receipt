@@ -31,11 +31,11 @@ function render() {
     platform:$('#outreach-platform').value,status:$('#outreach-status').value,
     from:$('#outreach-from').value,to:$('#outreach-to').value,sort:$('#outreach-sort').value
   });
-  const fresh = leads.filter(l => l.stage !== 'Outreach' && !closed(l) && !l.seen_at).length;
+  const fresh = leads.filter(l => !l.is_test && l.stage !== 'Outreach' && !closed(l) && !l.seen_at).length;
   $('#new-count').textContent = fresh || '';
   $('#pipeline-title').textContent = pipeline === 'followups' ? 'Follow-ups' : pipeline === 'outreach' ? 'Outreach' : pipeline === 'customers' ? 'Customers' : 'Active prospects';
   $('#lead-filters').hidden = pipeline !== 'prospects';
-  $('#summary').textContent = pipeline === 'followups' ? `${pool.filter(l=>l.follow_up).length} scheduled · ${pool.filter(l=>!l.follow_up).length} without a date · ${pool.filter(due).length} due or overdue` : pipeline === 'outreach' ? `${shown.length} of ${pool.length} conversations · ${pool.filter(l=>l.new_reply).length} new replies · ${pool.filter(l=>l.conversation_state==='Needs reply').length} need reply` : pipeline === 'customers' ? `${pool.length} customers` : `${pool.filter(l=>!closed(l)).length} active · ${pool.filter(due).length} to follow up`;
+  $('#summary').textContent = pipeline === 'followups' ? `${pool.filter(l=>l.follow_up).length} scheduled · ${pool.filter(l=>!l.follow_up).length} without a date · ${pool.filter(due).length} due or overdue` : pipeline === 'outreach' ? `${shown.length} of ${pool.length} conversations · ${pool.filter(l=>l.new_reply).length} new replies · ${pool.filter(l=>l.conversation_state==='Needs reply').length} need reply` : pipeline === 'customers' ? `${pool.filter(l=>!l.is_test).length} customers${pool.some(l=>l.is_test)?' · '+pool.filter(l=>l.is_test).length+' test record(s)':''}` : `${pool.filter(l=>!l.is_test&&!closed(l)).length} active · ${pool.filter(l=>!l.is_test&&due(l)).length} to follow up`;
   if (!shown.length) {
     const box = el('div', 'empty');
     box.append(el('h2','',!leads.length ? 'Add your first lead.' : 'Nothing here right now.'),el('p','',!leads.length ? 'Put in their details and a few notes. Your closer can take it from there.' : 'Try another filter or search.'));
@@ -64,7 +64,7 @@ function render() {
     }
     if (due(lead)) right.append(el('span','due',lead.follow_up === today() ? 'Follow up today' : 'Follow-up overdue'));
     if (pipeline==='followups')right.append(el('span','followup-date',lead.follow_up?new Date(lead.follow_up+'T12:00:00Z').toLocaleDateString('en-US',{timeZone:'UTC',month:'short',day:'numeric',year:'numeric'}):'No date set'));
-    right.append(el('span','badge' + (lead.status === 'Call booked' ? ' booked' : lead.status === 'Won' ? ' won' : ''),pipeline==='outreach'?(lead.contact_method||'Platform not recorded'):lead.status),el('span','chevron','›'));
+    right.append(el('span','badge' + (lead.status === 'Call booked' ? ' booked' : lead.status === 'Won' ? ' won' : ''),lead.is_test?'Test · excluded from totals':pipeline==='outreach'?(lead.contact_method||'Platform not recorded'):lead.status),el('span','chevron','›'));
     row.append(left,right); row.onclick = () => pipeline==='customers' ? window.BMTCustomerProfile.open(lead.id) : openLead(lead); root.append(row);
   }
 }
@@ -255,7 +255,7 @@ let calendarDay = today(), calendarMonth = calendarDay.slice(0,7);
 const dayDate = day => new Date(day + 'T12:00:00Z');
 const vanDate = iso => new Intl.DateTimeFormat('en-CA',{timeZone:'Etc/GMT+7',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(iso));
 const vanTime = iso => new Intl.DateTimeFormat('en-US',{timeZone:'Etc/GMT+7',hour:'numeric',minute:'2-digit'}).format(new Date(iso));
-function appointments() { return leads.filter(l=>l.status==='Call booked' && l.call_start_utc).sort((a,b)=>a.call_start_utc.localeCompare(b.call_start_utc)); }
+function appointments() { return leads.filter(l=>!l.is_test && l.status==='Call booked' && l.call_start_utc).sort((a,b)=>a.call_start_utc.localeCompare(b.call_start_utc)); }
 function renderCalendar() {
   const first = dayDate(calendarMonth+'-01'), year=first.getUTCFullYear(), month=first.getUTCMonth();
   $('#calendar-month').textContent = first.toLocaleDateString('en-US',{timeZone:'UTC',month:'long',year:'numeric'});

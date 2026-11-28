@@ -166,7 +166,7 @@ def add():
     try:
         p = payload()
         n = store.add_lead(p.get('company', ''), p.get('contact', ''), p.get('phone', ''),
-                           p.get('email', ''), p.get('need', ''), p.get('follow_up') or None,
+                           p.get('email', ''), p.get('need', ''), p.get('follow_up') or None, is_test=p.get('is_test',False),
                            **{k:p.get(k,'Prospect' if k=='stage' else '') for k in
                               ['instagram','location','stage','contact_method','contact_account','last_contacted_at']})
         return jsonify(id=n), 201

@@ -54,6 +54,7 @@ def connect():
         'lead_timezone': "TEXT NOT NULL DEFAULT ''",
         'business_hours': "TEXT NOT NULL DEFAULT '{}'",
         'website': "TEXT NOT NULL DEFAULT ''",
+        'is_test': 'INTEGER NOT NULL DEFAULT 0',
     }.items():
         if name not in columns:
             try:
@@ -61,6 +62,11 @@ def connect():
             except sqlite3.OperationalError:
                 if name not in {r['name'] for r in con.execute('PRAGMA table_info(crm_leads)')}:
                     raise
+    if 'is_test' not in columns:
+        # Identify only the two known fixtures; preserve their onboarding/booking data.
+        con.execute("""UPDATE crm_leads SET is_test=1 WHERE
+            (company='TEST — CRM Booking Email — Michael' AND lower(email)='michael@blackmountaintechnologies.ca') OR
+            (company='TEST — Demo Concrete Contractor' AND lower(email)='demo@example.com')""")
     con.execute('''CREATE TABLE IF NOT EXISTS crm_outreach_events (
         event_key TEXT PRIMARY KEY, lead_id INTEGER NOT NULL REFERENCES crm_leads(id),
         method TEXT NOT NULL, account TEXT NOT NULL, sent_at TEXT NOT NULL, message TEXT NOT NULL
@@ -108,7 +114,10 @@ def contact_timestamp(value):
 
 
 def add_lead(company, contact='', phone='', email='', need='', follow_up=None, *,
-             instagram='', location='', stage='Prospect', contact_method='', contact_account='', last_contacted_at=None):
+             instagram='', location='', stage='Prospect', contact_method='', contact_account='', last_contacted_at=None, is_test=False):
+    if type(is_test) is not bool:
+        raise ValueError('Check the test-record flag.')
+    is_test = is_test or company.strip().startswith('TEST — ')
     if not company.strip():
         raise ValueError('Enter the company name.')
     instagram = instagram_url(instagram)
@@ -120,10 +129,10 @@ def add_lead(company, contact='', phone='', email='', need='', follow_up=None, *
     stamp = now()
     with connect() as con:
         cursor = con.execute('''INSERT INTO crm_leads
-            (company,contact,phone,email,need,follow_up,created_at,updated_at,instagram,location,stage,contact_method,contact_account,last_contacted_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+            (company,contact,phone,email,need,follow_up,created_at,updated_at,instagram,location,stage,contact_method,contact_account,last_contacted_at,is_test)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
             (company.strip(), contact.strip(), phone.strip(), email.strip(), need.strip(), follow_up, stamp, stamp,
-             instagram,location.strip(),stage,contact_method.strip(),contact_account.strip(),last_contacted_at))
+             instagram,location.strip(),stage,contact_method.strip(),contact_account.strip(),last_contacted_at,int(is_test)))
         return cursor.lastrowid
 
 
