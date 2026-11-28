@@ -80,6 +80,12 @@ def read(lead_id):
         defaults = {k: lead[k] for k in ('contact', 'email', 'phone')}
         defaults.update(area=lead['location'], budget='1500', lead_owner=lead['contact'],
                         lead_email=lead['email'], lead_phone=lead['phone'], approver=lead['contact'])
+        if con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='crm_sales_call_facts'").fetchone() and 'answers' in {r[1] for r in con.execute('PRAGMA table_info(crm_sales_call_facts)')}:
+            sales=con.execute('SELECT answers FROM crm_sales_call_facts WHERE lead_id=?',(lead_id,)).fetchone()
+            if sales:
+                answers=json.loads(sales['answers'])
+                for target,source in [('area','service_area'),('project','ideal_jobs'),('qualification','lead_quality')]:
+                    if answers.get(source):defaults[target]=answers[source]
         if row:
             defaults.update(json.loads(row['data']))
         return dict(lead_id=lead_id, company=lead['company'], customer=lead['status']=='Won',

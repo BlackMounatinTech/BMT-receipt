@@ -3,7 +3,7 @@ import os
 import secrets
 import hmac
 from datetime import date
-from flask import Flask, jsonify, render_template, request, session
+from flask import Flask, jsonify, render_template, request, session, send_file
 import crm_store as store
 
 def session_secret():
@@ -63,6 +63,63 @@ def sales_call_facts(n):
     except store.Conflict as e:return jsonify(error=str(e)),409
     except LookupError as e:return jsonify(error=str(e)),404
     except (ValueError,TypeError) as e:return jsonify(error=str(e)),400
+
+
+@app.route('/api/leads/<int:n>/sales-close',methods=['GET','POST'])
+def sales_close_record(n):
+    import crm_sales_close as close
+    try:return jsonify(close.read(n) if request.method=='GET' else close.save(n,request.get_json(silent=True)))
+    except store.Conflict as e:return jsonify(error=str(e)),409
+    except LookupError as e:return jsonify(error=str(e)),404
+    except (ValueError,TypeError) as e:return jsonify(error=str(e)),400
+
+@app.route('/api/leads/<int:n>/sales-close/email/<kind>',methods=['GET','POST'])
+def sales_close_email(n,kind):
+    import crm_sales_close as close
+    try:return jsonify(close.preview(n,kind) if request.method=='GET' else close.send(n,kind,request.get_json(silent=True)))
+    except store.Conflict as e:return jsonify(error=str(e)),409
+    except LookupError as e:return jsonify(error=str(e)),404
+    except (ValueError,TypeError) as e:return jsonify(error=str(e)),400
+
+@app.post('/api/leads/<int:n>/sales-close/payment')
+def sales_close_payment(n):
+    import crm_sales_close as close
+    try:return jsonify(close.confirm_payment(n,request.get_json(silent=True)))
+    except store.Conflict as e:return jsonify(error=str(e)),409
+    except LookupError as e:return jsonify(error=str(e)),404
+    except (ValueError,TypeError) as e:return jsonify(error=str(e)),400
+
+@app.post('/api/leads/<int:n>/sales-close/book')
+def sales_close_book(n):
+    import crm_sales_close as close
+    try:return jsonify(close.book(n,request.get_json(silent=True)))
+    except store.Conflict as e:return jsonify(error=str(e)),409
+    except LookupError as e:return jsonify(error=str(e)),404
+    except (ValueError,TypeError) as e:return jsonify(error=str(e)),400
+
+@app.route('/api/leads/<int:n>/sales-close/document/<kind>',methods=['GET','POST'])
+def sales_close_document(n,kind):
+    import crm_sales_close as close
+    try:
+        if request.method=='GET':
+            import io
+            doc=close.document(n,kind)
+            return send_file(io.BytesIO(doc['body']),mimetype='application/pdf',download_name=doc['filename'],as_attachment=True)
+        file=request.files.get('file')
+        if not file:raise ValueError('Choose a PDF file.')
+        return jsonify(close.upload(n,kind,file))
+    except LookupError as e:return jsonify(error=str(e)),404
+    except (ValueError,TypeError) as e:return jsonify(error=str(e)),400
+
+@app.get('/api/sales-close/appointments')
+def sales_onboarding_appointments():
+    from crm_sales_close import appointments
+    return jsonify(appointments=appointments())
+
+@app.get('/api/sales-call/questions')
+def sales_questions():
+    from crm_sales_questions import definition
+    return jsonify(definition())
 
 
 @app.get('/api/onboarding/fields')

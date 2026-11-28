@@ -117,7 +117,7 @@ class Providers:
         result = request_json('POST','https://api.zoom.us/v2/users/'+quote(details['host']['zoom_user'],safe='')+'/meetings',
             mutation=True,headers={'Authorization':'Bearer '+token['access_token']},json={
                 'topic':'Black Mountain Technologies call — '+details['company'],'type':2,
-                'start_time':details['start'],'duration':30,'timezone':'UTC',
+                'start_time':details['start'],'duration':details.get('duration',30),'timezone':'UTC',
                 'settings':{'waiting_room':True,'join_before_host':False,'use_pmi':False}})
         if not result.get('id') or not result.get('join_url'):
             raise ProviderError('Zoom did not return meeting details. Check Zoom before retrying.',uncertain=True)
@@ -134,7 +134,7 @@ class Providers:
         if response.status_code == 200:
             event = response.json()
         elif response.status_code == 404:
-            event = request_json('POST',url,mutation=True,headers=self.google_headers(),params={'sendUpdates':'all'},json={
+            event = request_json('POST',url,mutation=True,headers=self.google_headers(),params={'sendUpdates':'none' if details.get('silent_invite') else 'all'},json={
                 'id':event_id,'summary':'Black Mountain Technologies call — '+details['company'],
                 'description':details['description']+'\n\nJoin Zoom: '+zoom_url+'\n\nTo reschedule, reply to the invitation.',
                 'location':zoom_url,'start':{'dateTime':details['start']},'end':{'dateTime':details['end']},

@@ -1,5 +1,6 @@
 (()=>{
 const dialog=$('#customer-profile');let record=null,dirty=false,ticket=0;
+let salesLabels={};api('/api/sales-call/questions').then(r=>{salesLabels=Object.fromEntries([...r.common,...Object.values(r.specific).flat(),...r.follow_up]);salesLabels.trade='Contractor type';}).catch(()=>{});
 let onboardingLabels={};api('/api/onboarding/fields').then(r=>{onboardingLabels=Object.fromEntries(r.fields.map(f=>[f.key,f.label]));}).catch(()=>{});
 const fields=['contract_url','invoice_url','payment_url','payment_reference','payment_plan','paid_at','notes','results_from','results_to','ad_spend','qualified_leads','quotes_sent','jobs_won','job_revenue'];
 const form=$('#customer-profile-form'),state=t=>$('#customer-profile-state').textContent=t;
@@ -9,6 +10,7 @@ function render(){
  for(const k of fields)form.elements[k].value=record.data[k]||'';
  const metrics=$('#customer-profile-metrics');metrics.replaceChildren();for(const [label,value]of [['Logged calls',record.calls],['Qualified leads',record.data.qualified_leads||'—'],['Jobs won',record.data.jobs_won||'—']])metrics.append(el('div','stat-card',label+': '+value));
  const prefs=$('#customer-ad-preferences');prefs.replaceChildren();if(record.onboarding){for(const[k,v]of Object.entries(record.onboarding.data)){if(v)prefs.append(el('p','',(onboardingLabels[k]||k.replaceAll('_',' '))+': '+v));}}else prefs.textContent='Complete their onboarding worksheet to save advertising preferences here.';
+ if(record.discovery&&Object.values(record.discovery).some(Boolean)){prefs.append(el('h3','','Sales call answers'));for(const[k,v]of Object.entries(record.discovery)){if(v)prefs.append(el('p','',(salesLabels[k]||k.replaceAll('_',' '))+': '+v));}}
  documents();dirty=false;state('');
 }
 async function open(id){if(dirty&&!confirm('Discard unsaved profile changes?'))return;const n=++ticket;record=null;dirty=false;dialog.showModal();form.inert=true;$('#customer-profile-title').textContent='Loading customer…';$('#customer-profile-contact').textContent='';$('#customer-profile-metrics').replaceChildren();$('#customer-ad-preferences').replaceChildren();$('#customer-documents').replaceChildren();form.reset();state('Loading customer…');try{const r=await api('/api/customers/'+id);if(n!==ticket)return;record=r;render();}catch(e){state(e.message);}finally{form.inert=false;}}
@@ -19,9 +21,4 @@ $('#customer-edit-contact').onclick=()=>{if(!record)return;if(dirty&&!confirm('D
 $('#customer-open-onboarding').onclick=async()=>{if(!record)return;if(dirty&&!confirm('Discard unsaved changes?'))return;dirty=false;dialog.close();await window.BMTOnboarding.open(record.lead.id);};
 $('#customer-document-form').onsubmit=async e=>{e.preventDefault();if(!record)return;const f=e.currentTarget;f.inert=true;try{const response=await fetch('/api/customers/'+record.lead.id+'/documents',{method:'POST',headers:{'X-CSRF-Token':$('meta[name="csrf"]').content},body:new FormData(f)});const r=await response.json();if(!response.ok)throw Error(r.error||'Upload failed');record.documents=r.documents;documents();f.reset();state('Document attached.');}catch(e){state(e.message);}finally{f.inert=false;}};
 window.BMTCustomerProfile={open};
-document.addEventListener('crm-sales-prospect-selected',()=>refreshSales());
-let prospects=[];const sale=$('#sale-form'),picker=$('#sale-company');
-async function refreshSales(){try{const r=await api('/api/leads');prospects=(Array.isArray(r)?r:r.leads).filter(l=>l.status!=='Won'&&l.status!=='Lost');const selected=$('#sales-prospect')?.value||picker.value;picker.replaceChildren(new Option('Choose a prospect',''));for(const l of prospects)picker.append(new Option(l.company,l.id));picker.value=selected;}catch(e){$('#sale-state').textContent=e.message;}}
-sale.onsubmit=async e=>{e.preventDefault();const lead=prospects.find(l=>String(l.id)===picker.value);if(!lead)return;sale.inert=true;try{const r=await api('/api/leads/'+lead.id+'/confirm-sale',{method:'POST',body:JSON.stringify({revision:lead.revision,payment_plan:sale.elements.payment_plan.value,contract_signed:sale.elements.contract_signed.checked,payment_received:sale.elements.payment_received.checked})});sale.reset();await refreshSales();await load();$('#sale-state').textContent='Purchase recorded. Company is now in Customers and available for onboarding.';await open(r.lead.id);}catch(e){$('#sale-state').textContent=e.message;}finally{sale.inert=false;}};
-$('#sale-completion').addEventListener('toggle',()=>{if($('#sale-completion').open)refreshSales();});window.addEventListener('hashchange',()=>{if(location.hash==='#sales-call')refreshSales();});
 })();

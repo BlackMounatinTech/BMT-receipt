@@ -2,7 +2,7 @@
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="csrf" content="{{ csrf }}"><title>BMT CRM</title>
-<link rel="stylesheet" href="/crm-assets/crm.css?v=sales-call-prospect-1">
+<link rel="stylesheet" href="/crm-assets/crm.css?v=sales-worksheet-2">
 </head><body>
 <header><a class="brand" href="/">BMT <span>CRM</span></a><nav class="main-nav" aria-label="Main navigation"><button id="nav-calling">Calling</button><button id="nav-called">Called</button><button id="nav-booked">Booked</button><button id="nav-followups">Follow-ups</button><button id="nav-outreach">Outreach</button><button id="nav-system">Outreach System</button><button id="nav-leads" class="active">Active prospects</button><button id="nav-customers">Customers</button><button id="nav-calendar">Calendar</button><button id="nav-stats">Data</button><button id="nav-sales-call">Sales Call</button><button id="nav-onboarding">Onboarding</button></nav><div class="header-right"><div class="call-counter" aria-label="Calls, booked meetings and closes"><div aria-live="polite"><span><strong id="calls-today">—</strong> Today</span><span><strong id="calls-total">—</strong> Overall</span><span title="Companies with a booked meeting, including those subsequently won"><strong id="meetings-booked">—</strong> Booked</span><span title="Deals marked Won"><strong id="deals-closed">—</strong> Closes</span></div><button id="new-call-day" title="Reset today’s count; keep the overall total">New day</button><small id="counter-error" role="status" hidden></small></div><label class="person">Using as <select id="person"><option>Michael</option><option>Closer</option></select></label><a class="tools" href="/tools/?view=tools">Tools ↗</a></div></header>
 <aside id="outreach-health-banner" class="outreach-alert-banner" role="status" aria-live="polite" hidden></aside>
@@ -91,7 +91,7 @@
 <main id="sales-call-page" class="sales-playbook" hidden>
  <div class="title-row"><h1>Sales Call</h1><button id="sales-prospects-refresh" type="button">Refresh prospects</button></div>
  <div class="onboarding-picker"><label>Choose a prospect<select id="sales-prospect"><option value="">Choose a prospect from Booked</option></select></label><p id="sales-prospect-summary"></p></div>
- <p id="sales-prospect-error" role="alert" hidden></p>
+ <p id="sales-prospect-error" role="alert" hidden></p><div id="sales-booked-details" class="booking-hint"></div>
  <div id="sales-prospect-context" hidden>
   <details class="sales-email"><summary>Company research · check or update the facts</summary>
    <p class="booking-hint">Fill in facts you have checked. Blank fields stay marked for confirmation in the opening.</p>
@@ -109,39 +109,44 @@
  <section class="stats-section"><h2>1. Opening</h2>
   <div id="sales-opening"><p class="booking-hint">Choose a booked prospect above to load their opening.</p></div>
  </section>
- <section class="stats-section"><h2>2. Questions</h2><p class="booking-hint">Questions to be added.</p></section>
+ <section class="stats-section"><h2>2. Questions</h2>
+ <div id="sales-questions-empty" class="booking-hint">Choose a prospect to start their worksheet.</div>
+ <form id="sales-questions-form" hidden><label>Contractor type<select id="sales-trade"></select></label>
+ <div class="onboarding-column-head"><span>What to ask</span><span>Their answer</span></div>
+ <div id="sales-common-questions"></div><h3>Questions for this trade</h3><div id="sales-trade-questions"></div>
+ <button type="submit" class="primary">Save answers</button><button id="sales-answers-reload" type="button">Load saved answers</button><p id="sales-answer-state" role="status"></p></form></section>
  <section class="stats-section"><h2>3. Explain the advertising</h2>
   <p>Explain how our advertising works: choose the projects they want more of, use their completed work to create the ads, and run Facebook and Instagram campaigns that bring enquiries through a contact form.</p>
   <p>Explain how those enquiries reach their team and how they turn a qualified enquiry into a quoted job.</p>
  </section>
  <section class="stats-section"><h2>4. Questions &amp; back and forth</h2>
-  <p>Find out where they stand on the offer. Ask questions, hear their concerns, and talk through what they want to change about their advertising.</p>
-  <p>Help them decide whether the approach makes sense for their company and whether they want to move forward.</p>
+  <div id="sales-followup-questions"></div>
  </section>
  <section class="stats-section"><h2>5. The close</h2>
-  <ol><li>Confirm the package, deliverables, ad budget, and payment option.</li><li>Send the contract, walk through it together, and collect the signed agreement.</li><li>Send the selected Stripe link and confirm payment has been received.</li><li>Book a 20-minute onboarding call. Confirm the date, time, and time zone.</li><li>Send the transaction summary and onboarding email below, with the meeting details filled in.</li></ol>
-  <div class="sales-payment-links"><a class="primary" href="https://buy.stripe.com/3cI28rcNq7qO6mLdif3cc0g" target="_blank" rel="noopener">$1,500 USD · 50% deposit</a><a href="https://buy.stripe.com/eVqaEX9BeeTg7qPdif3cc0h" target="_blank" rel="noopener">$3,000 USD · Full upfront payment</a></div>
-  <p>“Okay, now we’re going to book you for a quick onboarding call. I’m going to send you an email with the details of our agreement and payment, the date and time of our call, and a short list of what to have ready. The call should only take 20 minutes.”</p>
-  <details class="sales-email" id="sale-completion"><summary>Record the purchase &amp; create customer profile</summary>
-   <p>Use this only after the prospect has signed and paid. Booking a sales or onboarding call does not make them a customer.</p>
-   <form id="sale-form"><label>Company<select id="sale-company" required><option value="">Choose the prospect</option></select></label><label>Payment option<select name="payment_plan" required><option value="">Choose payment option</option><option>50% deposit</option><option>Full upfront</option></select></label><label class="sale-check"><input name="contract_signed" type="checkbox" required> Signed contract received</label><label class="sale-check"><input name="payment_received" type="checkbox" required> Payment received and checked in Stripe</label><button type="submit" class="primary">Confirm purchase &amp; create customer</button><p id="sale-state" role="status"></p></form>
-  </details>
-  <details class="sales-email"><summary>Onboarding email template</summary>
-   <p><strong>Subject:</strong> Your BMT advertising package &amp; onboarding call</p>
-   <div class="sales-email-body">
-    <p>Hi [First name],</p>
-    <p>Thank you for choosing Black Mountain Technologies. Here are the details of your advertising package:</p>
-    <ul><li><strong>Company:</strong> [Company name]</li><li><strong>Service:</strong> Meta advertising management for the agreed projects and service area.</li><li><strong>Management fee:</strong> $3,000 USD.</li><li><strong>Payment received:</strong> [Amount] USD on [Date].</li><li><strong>Remaining balance:</strong> [For the deposit option: $1,500 USD, due once the agreed deliverables are fulfilled. For full upfront payment: $0 for this package payment.]</li><li><strong>Ad spend:</strong> $1,500 USD per month, paid separately to Meta.</li><li><strong>Agreement:</strong> Your signed contract is attached and sets out the deliverables and terms.</li></ul>
-    <p><strong>Our onboarding call is on [Date] at [Time and time zone].</strong><br>Length: 20 minutes.</p>
-    <p>At the time of our meeting, click this Zoom link to join:<br>[Zoom meeting link]</p>
-    <p><strong>To get ready for the call:</strong></p>
-    <ul><li>Be on your computer and logged into Meta Business Suite, with your Facebook Page and Instagram account available.</li><li>Have access to the email addresses, passwords, and verification device you use for these accounts. You will log in yourself and grant us access; please do not email passwords or verification codes.</li><li>Have your best project photos, videos, logo, and testimonials ready to share.</li><li>Have your payment method available for your Meta ad account.</li></ul>
-    <p>Please reply “Confirm” so we know you received this. If you need to change the time, reply to this email.</p>
-    <p>Michael MacKrell<br>Black Mountain Technologies<br>Michael@blackmountaintechnologies.ca</p>
-   </div>
-  </details>
-  <p><strong>Before sending:</strong> Fill in the placeholders, keep only the chosen payment option, attach the signed contract and payment receipt, and check the meeting link.</p>
-  <p>“Okay, great. Thank you for choosing us, and thank you for your business. We’ll speak on [onboarding date].”</p>
+  <div id="sales-close-empty" class="booking-hint">Choose a booked prospect above to load the close.</div>
+  <div id="sales-close-workspace" hidden>
+   <p id="sales-close-error" role="alert" hidden></p><p id="sales-close-state" role="status"></p>
+   <h3>1. Email the Stripe link</h3>
+   <p>“I’ll send you the payment link now. If you want to complete that while we’re here, I’ll stay on the call so we can make sure there are no issues.”</p>
+   <form id="sales-close-details"><div class="pair"><label>Send to<input name="email" type="email" required></label><label>Payment option<select name="payment_plan" required><option value="">Choose payment option</option><option>50% deposit</option><option>Full upfront</option></select></label></div>
+   <label>Stripe payment reference<input name="payment_reference" placeholder="Payment ID or receipt reference after you check Stripe"></label>
+   <button type="submit">Save close details</button></form>
+   <div class="called-actions"><button id="sales-preview-payment" type="button">Preview payment email</button></div>
+   <h3>2. Confirm payment</h3><p class="booking-hint">Check the actual payment in Stripe. This is a manual confirmation; the CRM does not detect payments automatically.</p>
+   <label class="sale-check"><input id="sales-payment-checked" type="checkbox"> I checked Stripe and the selected payment was received</label><button id="sales-confirm-payment" type="button">Confirm payment &amp; create customer</button><p id="sales-payment-status"></p>
+   <h3>3. Book the 20-minute onboarding call</h3>
+   <p>“Great, we just received it. We’ll send your receipt and contract, and we’ll need a quick 15–20 minute onboarding call to get access to your accounts and get the ads created and shipped. What time in the next two or three days works for you?”</p>
+   <form id="sales-onboarding-details">   <div class="pair"><label>Onboarding date<input name="date" type="date"></label><label>Time · their local time<input name="time" type="time" step="300"></label></div>
+   <div class="pair"><label>Time zone<select name="zone"><option>Eastern</option><option>Central</option><option>Mountain</option><option>Pacific (US)</option><option>Arizona</option><option>Vancouver</option></select></label><label>Host<select name="host_id"></select></label></div>
+<button type="submit">Save onboarding time</button></form>
+   <button id="sales-book-onboarding" type="button">Create onboarding Zoom &amp; calendar event</button><p id="sales-onboarding-status"></p>
+   <h3>4. Send one package email</h3><p>“We’ll send you your receipt, the contract to fill out and email back, and the date and time of our onboarding call, all in one email.”</p>
+   <div class="pair"><form id="sales-contract-upload"><label>Contract to sign · PDF<input name="file" type="file" accept="application/pdf" required></label><button type="submit">Attach contract</button></form><form id="sales-receipt-upload"><label>Actual Stripe payment receipt · PDF<input name="file" type="file" accept="application/pdf" required></label><button type="submit">Attach receipt</button></form></div><div id="sales-close-documents"></div>
+   <button id="sales-preview-package" type="button" class="primary">Preview receipt, contract &amp; onboarding email</button>
+   <div id="sales-close-preview" class="sales-email" hidden><p id="sales-close-recipient"></p><h3 id="sales-close-subject"></h3><pre id="sales-close-body"></pre><p id="sales-close-attachments"></p><label class="sale-check"><input id="sales-email-retry" type="checkbox"> If retrying, I checked Sent mail and confirmed this email was not delivered</label><button id="sales-close-send" type="button" class="primary">Send email</button></div>
+   <p>“Great, thanks for the business. We’ll talk to you in a couple of days.”</p>
+   <p class="booking-hint">The company moves to Customers after you confirm payment. The contract remains awaiting signature until you receive the signed copy and attach it to the customer profile.</p>
+  </div>
  </section>
 </main>
 <main id="onboarding-page" class="onboarding-workspace" hidden>
@@ -195,13 +200,14 @@
 <form id="customer-profile-form"><h3>Agreement &amp; payment</h3><div class="pair"><label>Payment option<select name="payment_plan"><option value="">Not recorded</option><option>50% deposit</option><option>Full upfront</option></select></label><label>Payment received date<input name="paid_at" type="date"></label></div><label>Payment link<input name="payment_url" type="url"></label><label>Stripe payment / receipt reference<input name="payment_reference" maxlength="10000"></label><label>Signed contract link<input name="contract_url" type="url"></label><label>Invoice link<input name="invoice_url" type="url"></label><h3>Customer results</h3><p class="booking-hint">Manually recorded totals for this reporting period. These are not live Meta results.</p><div class="pair"><label>Period from<input name="results_from" type="date"></label><label>Period through<input name="results_to" type="date"></label></div><div class="pair"><label>Ad spend (USD)<input name="ad_spend" type="number" min="0" step="0.01"></label><label>Qualified leads<input name="qualified_leads" type="number" min="0" step="1"></label></div><div class="pair"><label>Quotes sent<input name="quotes_sent" type="number" min="0" step="1"></label><label>Jobs won<input name="jobs_won" type="number" min="0" step="1"></label></div><label>Job revenue (USD)<input name="job_revenue" type="number" min="0" step="0.01"></label><label>Customer notes<textarea name="notes" rows="3" maxlength="10000"></textarea></label><button type="submit" class="primary">Save customer profile</button></form>
 <h3>Attached documents</h3><div id="customer-documents"></div><form id="customer-document-form"><div class="pair"><label>Document type<select name="kind"><option>Contract</option><option>Invoice</option><option>Other</option></select></label><label>File (PDF, PNG, JPEG; under 4 MB)<input name="file" type="file" accept="application/pdf,image/png,image/jpeg" required></label></div><button type="submit">Attach document</button></form></dialog>
 <script src="/crm-assets/outreach_list.js?v=outreach-inbox-3"></script>
-<script src="/crm-assets/crm.js?v=hourly-calendar-1"></script>
+<script src="/crm-assets/crm.js?v=sales-onboarding-calendar-2"></script>
 <script src="/crm-assets/lead_time.js?v=1"></script>
 <script src="/crm-assets/business_hours.js?v=1"></script>
 <script src="/crm-assets/stats.js?v=outreach-system-1"></script>
 <script src="/crm-assets/outreach_system.js?v=outreach-inbox-3"></script>
 <script src="/crm-assets/calling.js?v=calling-refresh-order-2"></script>
 <script src="/crm-assets/onboarding.js?v=onboarding-audit-3"></script>
-<script src="/crm-assets/customers.js?v=sales-prospect-2"></script>
-<script src="/crm-assets/sales_call.js?v=1"></script>
+<script src="/crm-assets/customers.js?v=sales-close-3"></script>
+<script src="/crm-assets/sales_call.js?v=worksheet-close-2"></script>
+<script src="/crm-assets/sales_close.js?v=1"></script>
 </body></html>

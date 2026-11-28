@@ -39,6 +39,6 @@ class SalesCallTests(unittest.TestCase):
   html=self.client.get('/').text
   self.assertLess(html.index('id="nav-calling"'),html.index('id="nav-called"'))
   self.assertLess(html.index('id="nav-called"'),html.index('id="nav-booked"'))
-  self.assertIn('id="sales-prospect"',html);self.assertIn('/crm-assets/sales_call.js?v=1',html)
+  self.assertIn('id="sales-prospect"',html);self.assertIn('/crm-assets/sales_call.js?v=',html)
 
 if __name__=='__main__':unittest.main()

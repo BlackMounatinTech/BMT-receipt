@@ -48,7 +48,11 @@ def read(lead_id):
         if con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='crm_onboarding'").fetchone():
             r=con.execute('SELECT data,updated_at FROM crm_onboarding WHERE lead_id=?',(lead_id,)).fetchone()
             if r: onboard={'data':json.loads(r['data']),'updated_at':r['updated_at']}
-        return dict(lead=lead,data=profile,revision=row['revision'] if row else 0,
+        discovery=None
+        if con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='crm_sales_call_facts'").fetchone() and 'answers' in {r[1] for r in con.execute('PRAGMA table_info(crm_sales_call_facts)')}:
+            sales=con.execute('SELECT answers FROM crm_sales_call_facts WHERE lead_id=?',(lead_id,)).fetchone()
+            if sales:discovery=json.loads(sales['answers'])
+        return dict(discovery=discovery,lead=lead,data=profile,revision=row['revision'] if row else 0,
                     updated_at=row['updated_at'] if row else None,documents=docs,calls=calls,onboarding=onboard)
 
 
